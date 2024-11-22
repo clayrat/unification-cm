@@ -108,70 +108,7 @@ ty-size _        = 1
 0<ty-size {t = _ ⟶ _} = z<s
 0<ty-size {t = con}     = z<s
 
--- constraints
-
-Constr : 𝒰
-Constr = Ty × Ty
-
-constr-size : Constr → ℕ
-constr-size (p , q) = ty-size p + ty-size q
-
-list-measure : List Constr → ℕ
-list-measure = List.rec 0 λ c → constr-size c +_
-
--- context of type vars
-
-Varctx : 𝒰
-Varctx = List Id
-
--- well-formedness
-
-wf-ty : Varctx → Ty → 𝒰
-wf-ty c (`` x)    = x ∈ c
-wf-ty c (p ⟶ q) = wf-ty c p × wf-ty c q
-wf-ty c con       = ⊤
-
-wf-constr-list : Varctx → List Constr → 𝒰
-wf-constr-list c l = All (λ x → wf-ty c (x .fst) × wf-ty c (x .snd)) l
-
-wf-ty-end : ∀ {a c} t → wf-ty c t → wf-ty (c ∷r a) t
-wf-ty-end (`` x)    w         = any-∷r-init w
-wf-ty-end (p ⟶ q) (wp , wq) = wf-ty-end p wp , wf-ty-end q wq
-wf-ty-end con       w         = tt
-
-wf-ty-weaken : ∀ {c1} c2 t → wf-ty c1 t → wf-ty (c1 ++ c2) t
-wf-ty-weaken {c1} []       t w = subst (λ q → wf-ty q t) (++-id-r c1 ⁻¹) w
-wf-ty-weaken {c1} (c ∷ c2) t w =
-  subst (λ q → wf-ty q t) (++-snoc c1 c2 c) $
-  wf-ty-weaken {c1 = c1 ∷r c} c2 t (wf-ty-end t w)
-
--- real constraints
-
-Constrs : 𝒰
-Constrs = Varctx × List Constr
-
-_<C_ : Constrs → Constrs → 𝒰
-_<C_ = ×-lex (λ v₁ v₂ → length v₁ < length v₂) (λ c₁ c₂ → list-measure c₁ < list-measure c₂)
-
-_≤C_ : Constrs → Constrs → 𝒰
-(v₁ , c₁) ≤C (v₂ , c₂) = (length v₁ ≤ length v₂) × (list-measure c₁ ≤ list-measure c₂)
-
-≤C-af : AF _≤C_
-≤C-af = af-× (af-comap length af-≤) (af-comap list-measure af-≤)
-
-<∩≤C=∅ : ∀ {v₁ c₁ v₂ c₂}
-              → Plus _<C_ (v₁ , c₁) (v₂ , c₂)
-              → (v₂ , c₂) ≤C (v₁ , c₁)
-              → ⊥
-<∩≤C=∅ {v₁} {c₁} {v₂} {c₂} p (le₁ , le₂) =
-  [ ≤→≯ le₁ , ≤→≯ le₂ ∘ snd ]ᵤ
-   (plus-fold1
-      (record { _∙_ = λ {x} {y} {z} →
-              ×-lex-trans <-trans <-trans {pqx = x} {pqy = y} {pqz = z}})
-       p)
-
-<C-wf : is-wf _<C_
-<C-wf = AF→WF ≤C-af <∩≤C=∅
+-- occurs check
 
 occurs : Id → Ty → 𝒰
 occurs v (`` x)    = v ＝ x
@@ -194,21 +131,130 @@ occurs-dec : ∀ {v t} → Dec (occurs v t)
 occurs-dec {v} {t} .does  = occurs? v t
 occurs-dec {v} {t} .proof = occurs-reflects {v} {t}
 
-sub : Ty → Id → Ty → Ty
-sub t1 x (`` y)    = if x =? y then t1 else `` y
-sub t1 x (p ⟶ q) = sub t1 x p ⟶ sub t1 x q
-sub t1 x con       = con
+-- constraints
+
+Constr : 𝒰
+Constr = Ty × Ty
+
+constr-size : Constr → ℕ
+constr-size (p , q) = ty-size p + ty-size q
+
+list-measure : List Constr → ℕ
+list-measure = List.rec 0 λ c → constr-size c +_
+
+-- context of type vars
+
+Varctx : 𝒰
+Varctx = List Id
+
+member-end : ∀ {d} {x : Id} → x ∈ (d ∷r x)
+member-end = any-∷r-last refl
+
+member-id : ∀ {d1 d2} {x : Id} → x ∈ (d1 ++ x ∷ d2)
+member-id = any-++-r (here refl)
 
 rem : Id → Varctx → Varctx
 rem v = filter (not ∘ _=? v)
+
+remove-length-∉ : ∀ {c v} → v ∉ c → length (rem v c) ＝ length c
+remove-length-∉ {c} {v} vn =
+  ap length $ filter-all $
+  true→so! ⦃ Reflects-all {xs = c} {P = _≠ v} λ x → Reflects-¬ ⦃ rp = Reflects-ℕ-Path ⦄ ⦄
+    (¬Any→All¬ (contra (any-map _⁻¹) vn))
+
+remove-length-∈ : ∀ {c v} → v ∈ c → length (rem v c) < length c
+remove-length-∈ {c} {v} vi =
+  subst (_< length c) (length-filter (λ x → not (x =? _)) c ⁻¹) $
+  count<length (λ z → not (z == _)) c $
+  any-map (λ {x} e → subst So (not-invol (x == v) ⁻¹) (true→so! (e ⁻¹))) vi
+
+remove-comm : ∀ {x y c}
+            → rem x (rem y c) ＝ rem y (rem x c)
+remove-comm {c} = filter-comm {xs = c}
+
+remove-dist : ∀ {x c1 c2} → rem x (c1 ++ c2) ＝ rem x c1 ++ rem x c2
+remove-dist {c1} = filter-++ c1
+
+minus : Varctx → List Id → Varctx
+minus c = List.rec c rem
+
+minus-remove : ∀ {c1} c2 {x} → minus (rem x c1) c2 ＝ rem x (minus c1 c2)
+minus-remove      []           = refl
+minus-remove {c1} (c ∷ c2) {x} =
+    ap (rem c) (minus-remove c2)
+  ∙ remove-comm {x = c} {y = x} {c = minus c1 c2}
+
+-- well-formedness
+
+wf-ty : Varctx → Ty → 𝒰
+wf-ty c (`` x)    = x ∈ c
+wf-ty c (p ⟶ q) = wf-ty c p × wf-ty c q
+wf-ty c con       = ⊤
+
+wf-constr-list : Varctx → List Constr → 𝒰
+wf-constr-list c l = All (λ x → wf-ty c (x .fst) × wf-ty c (x .snd)) l
+
+wf-ty-end : ∀ {a c} t → wf-ty c t → wf-ty (c ∷r a) t
+wf-ty-end (`` x)    w         = any-∷r-init w
+wf-ty-end (p ⟶ q) (wp , wq) = wf-ty-end p wp , wf-ty-end q wq
+wf-ty-end con       w         = tt
+
+wf-ty-weaken : ∀ {c1} c2 t → wf-ty c1 t → wf-ty (c1 ++ c2) t
+wf-ty-weaken {c1} []       t w = subst (λ q → wf-ty q t) (++-id-r c1 ⁻¹) w
+wf-ty-weaken {c1} (c ∷ c2) t w =
+  subst (λ q → wf-ty q t) (++-snoc c1 c2 c) $
+  wf-ty-weaken {c1 = c1 ∷r c} c2 t (wf-ty-end t w)
+
+wf-constr-weaken : ∀ {d cs}
+                 → wf-constr-list d cs
+                 → ∀ d′ → wf-constr-list (d ++ d′) cs
+wf-constr-weaken wcl d′ =
+  all-map (λ {x} (w1 , w2) → wf-ty-weaken d′ (x .fst) w1 , wf-ty-weaken d′ (x .snd) w2) wcl
+
+wf-constr-weaken-∷r : ∀ {d cs}
+                    → wf-constr-list d cs
+                   → ∀ {c} → wf-constr-list (d ∷r c) cs
+wf-constr-weaken-∷r {d} {cs} wcl {c} =
+  subst (λ q → wf-constr-list q cs) (snoc-append d ⁻¹) $
+  wf-constr-weaken wcl (c ∷ [])
 
 wf-ty-remove-weak : ∀ {x c} t → wf-ty (rem x c) t → wf-ty c t
 wf-ty-remove-weak (`` x)    w         = ope→subset filter-OPE w
 wf-ty-remove-weak (p ⟶ q) (wp , wq) = wf-ty-remove-weak p wp , wf-ty-remove-weak q wq
 wf-ty-remove-weak con       w         = tt
 
-remove-dist : ∀ {x c1 c2} → rem x (c1 ++ c2) ＝ rem x c1 ++ rem x c2
-remove-dist {c1} = filter-++ c1
+wf-ty-minus-weaken : ∀ {c1} c2 {t} → wf-ty (minus c1 c2) t → wf-ty c1 t
+wf-ty-minus-weaken []                w = w
+wf-ty-minus-weaken {c1} (c ∷ c2) {t} w =
+  wf-ty-minus-weaken c2 {t = t} $ wf-ty-remove-weak t w
+
+occurs-wf-ty : ∀ {v c} t → wf-ty c t → ¬ occurs v t → wf-ty (rem v c) t
+occurs-wf-ty (`` x)    w         noc =
+  ∈-filter (not-so (contra (_⁻¹ ∘ so→true!) noc)) w
+occurs-wf-ty (p ⟶ q) (wp , wq) noc =
+  occurs-wf-ty p wp (contra inl noc) , occurs-wf-ty q wq (contra inr noc)
+occurs-wf-ty  con      w         noc = tt
+
+-- set of constraints
+
+Constrs : 𝒰
+Constrs = Varctx × List Constr
+
+-- substitution
+
+sub : Ty → Id → Ty → Ty
+sub t1 x (`` y)    = if x =? y then t1 else `` y
+sub t1 x (p ⟶ q) = sub t1 x p ⟶ sub t1 x q
+sub t1 x con       = con
+
+sub-occurs : ∀ {t v} u → ¬ occurs v u → u ＝ sub t v u
+sub-occurs {t} (`` x)    noc =
+  given-no noc
+    return (λ q → (`` x) ＝ (if ⌊ q ⌋ then t else (`` x)))
+    then refl
+sub-occurs     (p ⟶ q) noc =
+  ap² _⟶_ (sub-occurs p (contra inl noc)) (sub-occurs q (contra inr noc))
+sub-occurs      con      noc = refl
 
 subst-rem : ∀ {x c} t
           → wf-ty c t → x ∈ c
@@ -235,27 +281,6 @@ wf-subst c ((v , t) ∷ s) = v ∈ c × wf-ty (rem v c) t × wf-subst (rem v c) 
 
 apply-subst : Substitution → Ty → Ty
 apply-subst s t = fold-l (λ t′ (v , q) → sub q v t′) t s
-
-apply-subst-constrs : Substitution → List Constr → List Constr
-apply-subst-constrs s = map λ (x , y) → apply-subst s x , apply-subst s y
-
-minus : Varctx → List Id → Varctx
-minus c = List.rec c rem
-
-remove-comm : ∀ {x y c}
-            → rem x (rem y c) ＝ rem y (rem x c)
-remove-comm {c} = filter-comm {xs = c}
-
-minus-remove : ∀ {c1} c2 {x} → minus (rem x c1) c2 ＝ rem x (minus c1 c2)
-minus-remove      []           = refl
-minus-remove {c1} (c ∷ c2) {x} =
-    ap (rem c) (minus-remove c2)
-  ∙ remove-comm {x = c} {y = x} {c = minus c1 c2}
-
-wf-ty-minus-weaken : ∀ {c1} c2 {t} → wf-ty (minus c1 c2) t → wf-ty c1 t
-wf-ty-minus-weaken []                w = w
-wf-ty-minus-weaken {c1} (c ∷ c2) {t} w =
-  wf-ty-minus-weaken c2 {t = t} $ wf-ty-remove-weak t w
 
 substs-remove : ∀ {c t} s → wf-subst c s → wf-ty c t → wf-ty (minus c (dom s)) (apply-subst s t)
 substs-remove          []             _             w = w
@@ -286,6 +311,27 @@ apply-subst-end {s} {v} {t} {t′} = foldl-∷r t′ (λ t′ (v , q) → sub q 
 apply-subst-append : ∀ {s1 s2 t} → apply-subst (s1 ++ s2) t ＝ apply-subst s2 (apply-subst s1 t)
 apply-subst-append {s1} {s2} {t} = foldl-++ t (λ t′ (v , q) → sub q v t′) s1 s2
 
+apply-subst-idem : ∀ {d s t} → wf-ty (minus d (dom s)) t → apply-subst s t ＝ t
+apply-subst-idem     {s = []}          {t = `` v}    wt       = refl
+apply-subst-idem {d} {s = (i , t) ∷ s} {t = `` v}    wt       =
+  Dec.elim
+    {C = λ q → apply-subst s (if ⌊ q ⌋ then t else (`` v)) ＝ (`` v)}
+    (λ evx → absurd ((so-not $ fst $ filter-∈ {xs = minus d (dom s)} wt) (true→so! (evx ⁻¹))))
+    (λ _ → apply-subst-idem {d = d} {s = s} (filter-∈ wt .snd))
+    (i ≟ v)
+apply-subst-idem     {s}               {t = p ⟶ q} (wp , wq) =
+    apply-subst-app {s = s}
+  ∙ ap² _⟶_ (apply-subst-idem {s = s} wp) (apply-subst-idem {s = s} wq)
+apply-subst-idem     {s}               {t = con}     wt        =
+  apply-subst-con {s}
+
+gen-only-add : ∀ {s c1 c2}
+             → (∀ {t1 t2} → (t1 , t2) ∈ (c2 ++ c1) → apply-subst s t1 ＝ apply-subst s t2)
+             → ∀ {t1 t2} → (t1 , t2) ∈ c1 → apply-subst s t1 ＝ apply-subst s t2
+gen-only-add          {c2 = []}           h mem = h mem
+gen-only-add {s} {c1} {c2 = (l , r) ∷ c2} h mem =
+  gen-only-add {s = s} {c1 = c1} {c2 = c2} (h ∘ there) mem
+
 wf-subst-last : ∀ {x t c} s
               → wf-subst c s
               → x ∈ minus c (dom s)
@@ -305,60 +351,6 @@ wf-subst-append {c} {s1} ((v , t) ∷ s2) w1 (ci , wt , w2) =
   wf-subst-append {c = c} {s1 = s1 ∷r (v , t)} s2
     (wf-subst-last s1 w1 ci wt)
     (subst (λ q → wf-subst q s2) (minus-app s1 ⁻¹) w2)
-
-lt-list-constr-lt-measure : ∀ {t t′ l} → list-measure l < list-measure ((t , t′) ∷ l)
-lt-list-constr-lt-measure {t} = <-+-0lr $ <-+-r $ 0<ty-size {t = t}
-
-lt-list-constr-lt-constraints : ∀ {t t′ c l} → (c , l) <C (c , (t , t′) ∷ l)
-lt-list-constr-lt-constraints {t} {t′} {l} =
-  inr (refl , lt-list-constr-lt-measure {t = t} {t′ = t′} {l = l})
-
-app-lt-measure : ∀ {l l′ r r′ lc}
-               → list-measure ((l , l′) ∷ (r , r′) ∷ lc) < list-measure ((l ⟶ r , l′ ⟶ r′) ∷ lc)
-app-lt-measure {l} {l′} {r} {r′} {lc} =
-  subst (_< list-measure ((l ⟶ r , l′ ⟶ r′) ∷ lc))
-        (+-assoc (ty-size l + ty-size l′) (ty-size r + ty-size r′) (list-measure lc) ⁻¹) $
-  <-≤-+ {m = ty-size l + ty-size l′ + (ty-size r + ty-size r′)}
-    (subst (λ q → ty-size l + ty-size l′ + (ty-size r + ty-size r′) < suc q)
-           (+-suc-r (ty-size l + ty-size r) (ty-size l′ + ty-size r′) ⁻¹) $
-     subst (λ q → ty-size l + ty-size l′ + (ty-size r + ty-size r′) < suc (suc q))
-           (+-interchange (ty-size l) (ty-size l′) (ty-size r) (ty-size r′)) $
-     <-+-lr {n = 1})
-    (=→≤ refl)
-
-app-lt-constraints : ∀ {l l′ r r′ lc c}
-                   → (c , (l , l′) ∷ (r , r′) ∷ lc) <C (c , (l ⟶ r , l′ ⟶ r′) ∷ lc)
-app-lt-constraints {l} {l′} {r} {r′} {lc} =
-  inr (refl , app-lt-measure {l = l} {l′ = l′} {r = r} {r′ = r′} {lc = lc})
-
-non-member-remove-length : ∀ {c v} → v ∉ c → length (rem v c) ＝ length c
-non-member-remove-length {c} {v} vn =
-  ap length $ filter-all $
-  true→so! ⦃ Reflects-all {xs = c} {P = _≠ v} λ x → Reflects-¬ ⦃ rp = Reflects-ℕ-Path ⦄ ⦄
-    (¬Any→All¬ (contra (any-map _⁻¹) vn))
-
-remove-varctxt-length : ∀ {c v} → v ∈ c → length (rem v c) < length c
-remove-varctxt-length {c} {v} vi =
-  subst (_< length c) (length-filter (λ x → not (x =? _)) c ⁻¹) $
-  count<length (λ z → not (z == _)) c $
-  any-map (λ {x} e → subst So (not-invol (x == v) ⁻¹) (true→so! (e ⁻¹))) vi
-
-varctxt-lt-constraints-varl : ∀ {c v t l}
-                            → v ∈ c
-                            → (rem v c , apply-subst-constrs ((v , t) ∷ []) l) <C (c , (t , `` v) ∷ l)
-varctxt-lt-constraints-varl vi = inl (remove-varctxt-length vi)
-
-varctxt-lt-constraints-varr : ∀ {c v t l}
-                            → v ∈ c
-                            → (rem v c , apply-subst-constrs ((v , t) ∷ []) l) <C (c , (`` v , t) ∷ l)
-varctxt-lt-constraints-varr vi = inl (remove-varctxt-length vi)
-
-occurs-wf-ty : ∀ {v c} t → wf-ty c t → ¬ occurs v t → wf-ty (rem v c) t
-occurs-wf-ty (`` x)    w         noc =
-  ∈-filter (not-so (contra (_⁻¹ ∘ so→true!) noc)) w
-occurs-wf-ty (p ⟶ q) (wp , wq) noc =
-  occurs-wf-ty p wp (contra inl noc) , occurs-wf-ty q wq (contra inr noc)
-occurs-wf-ty  con      w         noc = tt
 
 app-subst-eq : ∀ {l l′ r r′ s}
              → apply-subst s l ＝ apply-subst s l′
@@ -386,33 +378,81 @@ ext-subst-var-ty {s} {s′} ex (p ⟶ q) =
 ext-subst-var-ty {s} {s′} ex con       =
   apply-subst-con {s = s} ∙ apply-subst-con {s = s′} ⁻¹
 
-sub-occurs : ∀ {t v} u → ¬ occurs v u → u ＝ sub t v u
-sub-occurs {t} (`` x)    noc =
-  given-no noc
-    return (λ q → (`` x) ＝ (if ⌊ q ⌋ then t else (`` x)))
-    then refl
-sub-occurs     (p ⟶ q) noc =
-  ap² _⟶_ (sub-occurs p (contra inl noc)) (sub-occurs q (contra inr noc))
-sub-occurs      con      noc = refl
+apply-subst-constrs : Substitution → List Constr → List Constr
+apply-subst-constrs s = map λ (x , y) → apply-subst s x , apply-subst s y
 
-data UnifyFailure : List Constr → 𝒰 where
-  occ-fail-l : ∀ {v t lc}
-             → occurs v t → UnifyFailure ((`` v , t) ∷ lc)
-  occ-fail-r : ∀ {v t lc}
-             → occurs v t → UnifyFailure ((t , `` v) ∷ lc)
-  con-app    : ∀ {l r lc}
-             → UnifyFailure ((con , l ⟶ r) ∷ lc)
-  app-con    : ∀ {l r lc}
-             → UnifyFailure ((l ⟶ r , con) ∷ lc)
-  -- seems unused ?
-  -- app-left   : ∀ {l l' r r' lc}
-  --            → UnifyFailure ((l , l') ∷ lc) → UnifyFailure ((l ⟶ r , l' ⟶ r') ∷ lc)
-  app-right  : ∀ {l l' r r' lc}
-             → UnifyFailure ((l , l') ∷ (r , r') ∷ lc) → UnifyFailure ((l ⟶ r , l' ⟶ r') ∷ lc)
-  constr-rec : ∀ {t t' l}
-             → UnifyFailure l → UnifyFailure ((t , t') ∷ l)
-  subs-rec   : ∀ {t t' s l}
-             → UnifyFailure (apply-subst-constrs s l) → UnifyFailure ((t , t') ∷ l)
+wf-constr-list-remove : ∀ {c v t}
+                      → v ∈ c → ¬ occurs v t → wf-ty c t
+                      → ∀ {l} → wf-constr-list c l
+                      → wf-constr-list (rem v c) (apply-subst-constrs ((v , t) ∷ []) l)
+wf-constr-list-remove {t} vi noc w =
+  all→map ∘
+  all-map
+    λ {x} (wl , wr) →
+        let wrem = occurs-wf-ty t w noc in
+        subst-rem (x .fst) wl vi t wrem , subst-rem (x .snd) wr vi t wrem
+
+-- constraint order
+
+_<C_ : Constrs → Constrs → 𝒰
+_<C_ = ×-lex (λ v₁ v₂ → length v₁ < length v₂) (λ c₁ c₂ → list-measure c₁ < list-measure c₂)
+
+_≤C_ : Constrs → Constrs → 𝒰
+(v₁ , c₁) ≤C (v₂ , c₂) = (length v₁ ≤ length v₂) × (list-measure c₁ ≤ list-measure c₂)
+
+≤C-af : AF _≤C_
+≤C-af = af-× (af-comap length af-≤) (af-comap list-measure af-≤)
+
+<∩≤C=∅ : ∀ {v₁ c₁ v₂ c₂}
+              → Plus _<C_ (v₁ , c₁) (v₂ , c₂)
+              → (v₂ , c₂) ≤C (v₁ , c₁)
+              → ⊥
+<∩≤C=∅ {v₁} {c₁} {v₂} {c₂} p (le₁ , le₂) =
+  [ ≤→≯ le₁ , ≤→≯ le₂ ∘ snd ]ᵤ
+   (plus-fold1
+      (record { _∙_ = λ {x} {y} {z} →
+              ×-lex-trans <-trans <-trans {pqx = x} {pqy = y} {pqz = z}})
+       p)
+
+<C-wf : is-wf _<C_
+<C-wf = AF→WF ≤C-af <∩≤C=∅
+
+lt-list-constr-lt-measure : ∀ {t t′ l} → list-measure l < list-measure ((t , t′) ∷ l)
+lt-list-constr-lt-measure {t} = <-+-0lr $ <-+-r $ 0<ty-size {t = t}
+
+lt-list-constr-lt-constraints : ∀ {t t′ c l} → (c , l) <C (c , (t , t′) ∷ l)
+lt-list-constr-lt-constraints {t} {t′} {l} =
+  inr (refl , lt-list-constr-lt-measure {t = t} {t′ = t′} {l = l})
+
+app-lt-measure : ∀ {l l′ r r′ lc}
+               → list-measure ((l , l′) ∷ (r , r′) ∷ lc) < list-measure ((l ⟶ r , l′ ⟶ r′) ∷ lc)
+app-lt-measure {l} {l′} {r} {r′} {lc} =
+  subst (_< list-measure ((l ⟶ r , l′ ⟶ r′) ∷ lc))
+        (+-assoc (ty-size l + ty-size l′) (ty-size r + ty-size r′) (list-measure lc) ⁻¹) $
+  <-≤-+ {m = ty-size l + ty-size l′ + (ty-size r + ty-size r′)}
+    (subst (λ q → ty-size l + ty-size l′ + (ty-size r + ty-size r′) < suc q)
+           (+-suc-r (ty-size l + ty-size r) (ty-size l′ + ty-size r′) ⁻¹) $
+     subst (λ q → ty-size l + ty-size l′ + (ty-size r + ty-size r′) < suc (suc q))
+           (+-interchange (ty-size l) (ty-size l′) (ty-size r) (ty-size r′)) $
+     <-+-lr {n = 1})
+    (=→≤ refl)
+
+app-lt-constraints : ∀ {l l′ r r′ lc c}
+                   → (c , (l , l′) ∷ (r , r′) ∷ lc) <C (c , (l ⟶ r , l′ ⟶ r′) ∷ lc)
+app-lt-constraints {l} {l′} {r} {r′} {lc} =
+  inr (refl , app-lt-measure {l = l} {l′ = l′} {r = r} {r′ = r′} {lc = lc})
+
+varctxt-lt-constraints-varl : ∀ {c v t l}
+                            → v ∈ c
+                            → (rem v c , apply-subst-constrs ((v , t) ∷ []) l) <C (c , (t , `` v) ∷ l)
+varctxt-lt-constraints-varl vi = inl (remove-length-∈ vi)
+
+varctxt-lt-constraints-varr : ∀ {c v t l}
+                            → v ∈ c
+                            → (rem v c , apply-subst-constrs ((v , t) ∷ []) l) <C (c , (`` v , t) ∷ l)
+varctxt-lt-constraints-varr vi = inl (remove-length-∈ vi)
+
+-- unifier
 
 unifier : List Constr → Substitution → 𝒰
 unifier cs s = All (λ (l , r) → apply-subst s l ＝ apply-subst s r) cs
@@ -444,19 +484,28 @@ unifier-subst     []              ea       u  = []
 unifier-subst {s} ((tl , tr) ∷ l) ea (et ∷ u) =
   unify-ty {s = s} tl ea ⁻¹ ∙ et ∙ unify-ty {s = s} tr ea ∷ unifier-subst {s = s} l ea u
 
--- wf-constraints : Constrs → 𝒰
--- wf-constraints (ctx , lc) = wf-constr-list ctx lc
+-- failure
 
-wf-constr-list-remove : ∀ {c v t}
-                      → v ∈ c → ¬ occurs v t → wf-ty c t
-                      → ∀ {l} → wf-constr-list c l
-                      → wf-constr-list (rem v c) (apply-subst-constrs ((v , t) ∷ []) l)
-wf-constr-list-remove {t} vi noc w =
-  all→map ∘
-  all-map
-    λ {x} (wl , wr) →
-        let wrem = occurs-wf-ty t w noc in
-        subst-rem (x .fst) wl vi t wrem , subst-rem (x .snd) wr vi t wrem
+data UnifyFailure : List Constr → 𝒰 where
+  occ-fail-l : ∀ {v t lc}
+             → occurs v t → UnifyFailure ((`` v , t) ∷ lc)
+  occ-fail-r : ∀ {v t lc}
+             → occurs v t → UnifyFailure ((t , `` v) ∷ lc)
+  con-app    : ∀ {l r lc}
+             → UnifyFailure ((con , l ⟶ r) ∷ lc)
+  app-con    : ∀ {l r lc}
+             → UnifyFailure ((l ⟶ r , con) ∷ lc)
+  -- seems unused ?
+  -- app-left   : ∀ {l l' r r' lc}
+  --            → UnifyFailure ((l , l') ∷ lc) → UnifyFailure ((l ⟶ r , l' ⟶ r') ∷ lc)
+  app-right  : ∀ {l l' r r' lc}
+             → UnifyFailure ((l , l') ∷ (r , r') ∷ lc) → UnifyFailure ((l ⟶ r , l' ⟶ r') ∷ lc)
+  constr-rec : ∀ {t t' l}
+             → UnifyFailure l → UnifyFailure ((t , t') ∷ l)
+  subs-rec   : ∀ {t t' s l}
+             → UnifyFailure (apply-subst-constrs s l) → UnifyFailure ((t , t') ∷ l)
+
+-- main algorithm
 
 unify-type : Constrs → 𝒰
 unify-type (ctx , lc) =

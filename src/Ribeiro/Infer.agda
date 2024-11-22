@@ -22,6 +22,8 @@ private variable
   ℓ : Level
   A B : 𝒰 ℓ
 
+-- terms
+
 data Term : 𝒰 where
   `_   : Id → Term
   _⌽_  : Term → Term → Term
@@ -30,6 +32,8 @@ data Term : 𝒰 where
 
 TyCtx : 𝒰
 TyCtx = List (Id × Ty)
+
+-- typing derivations
 
 -- TODO fixity
 data _⊢_⦂_ : TyCtx → Term → Ty → 𝒰 where
@@ -41,6 +45,8 @@ data _⊢_⦂_ : TyCtx → Term → Ty → 𝒰 where
         → Γ ⊢ l ⦂ (τ ⟶ τ′) → Γ ⊢ r ⦂ τ → Γ ⊢ l ⌽ r ⦂ τ′
   ⊢cst : ∀ {Γ}
         → Γ ⊢ cst ⦂ con
+
+-- tc monad
 
 record TcState : 𝒰 where
   constructor mkstate
@@ -111,6 +117,8 @@ look-just {x} {t} {s} {s′} {g = (y , r) ∷ g}   =
     (λ ne eq → first there (look-just {g = g} eq))
     (x ≟ y)
 
+-- typing context properties
+
 wf-tyctx : Varctx → TyCtx → 𝒰
 wf-tyctx d g = All (wf-ty d ∘ snd) g
 
@@ -123,25 +131,10 @@ wf-tyctx-weaken-∷r : ∀ {d t g}
 wf-tyctx-weaken-∷r {d} {g} =
   subst (λ q → wf-tyctx q g) (snoc-append d ⁻¹) ∘ wf-tyctx-weaken
 
--- TODO move to Unify?
-wf-constr-weaken : ∀ {d cs}
-                 → wf-constr-list d cs
-                 → ∀ d′ → wf-constr-list (d ++ d′) cs
-wf-constr-weaken wcl d′ =
-  all-map (λ {x} (w1 , w2) → wf-ty-weaken d′ (x .fst) w1 , wf-ty-weaken d′ (x .snd) w2) wcl
+apply-ctx : Substitution → TyCtx → TyCtx
+apply-ctx s = map (second (apply-subst s))
 
-wf-constr-weaken-∷r : ∀ {d cs}
-                    → wf-constr-list d cs
-                   → ∀ {c} → wf-constr-list (d ∷r c) cs
-wf-constr-weaken-∷r {d} {cs} wcl {c} =
-  subst (λ q → wf-constr-list q cs) (snoc-append d ⁻¹) $
-  wf-constr-weaken wcl (c ∷ [])
-
-member-end : ∀ {d} {x : Id} → x ∈ (d ∷r x)
-member-end = any-∷r-last refl
-
-member-id : ∀ {d1 d2} {x : Id} → x ∈ (d1 ++ x ∷ d2)
-member-id = any-++-r (here refl)
+-- constraint generator
 
 gen-constr : TyCtx → Term → TcM Ty
 gen-constr g (` v)     = look v g
@@ -261,6 +254,8 @@ gen-constr-extends          {e = cst}     gce =
   let seq = fst $ ×-path-inv $ just-inj gce in
   [] , ap constrs (seq ⁻¹)
 
+-- type inference
+
 type-infer : Term → Maybe Ty
 type-infer e =
   let x = gen-constr [] e (mkstate 0 [] []) in
@@ -272,16 +267,6 @@ type-infer e =
             [ (λ (s , _) → just (apply-subst s t))
             , (λ _ → nothing) ]ᵤ)
     x refl
-
-gen-only-add : ∀ {s c1 c2}
-             → (∀ {t1 t2} → (t1 , t2) ∈ (c2 ++ c1) → apply-subst s t1 ＝ apply-subst s t2)
-             → ∀ {t1 t2} → (t1 , t2) ∈ c1 → apply-subst s t1 ＝ apply-subst s t2
-gen-only-add          {c2 = []}           h mem = h mem
-gen-only-add {s} {c1} {c2 = (l , r) ∷ c2} h mem =
-  gen-only-add {s = s} {c1 = c1} {c2 = c2} (h ∘ there) mem
-
-apply-ctx : Substitution → TyCtx → TyCtx
-apply-ctx s = map (second (apply-subst s))
 
 has-type-subst : ∀ {s Γ e τ}
                → Γ ⊢ e ⦂ τ

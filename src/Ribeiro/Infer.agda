@@ -16,6 +16,7 @@ open import Data.List.Correspondences.Unary.All
 open import Data.List.Correspondences.Unary.Any
 open import Data.List.Operations.Properties
 
+open import Ribeiro.Ty
 open import Ribeiro.Unify
 
 private variable
@@ -295,30 +296,6 @@ has-type-apply-ctx {Γ} {e} {τ} {s1} {s2} =
   subst (_⊢ e ⦂ apply-subst (s1 ++ s2) τ) (apply-ctx-compose {s1 = s1} ⁻¹) ∘
   subst (apply-ctx s2 (apply-ctx s1 Γ) ⊢ e ⦂_) (apply-subst-append {s1 = s1} ⁻¹) ∘
   has-type-subst {s = s2}
-
-{-
-member-remove : ∀ {c i} → i ∉ rem i c
-member-remove {c} {i} mem =
-  (so-not $ fst $ filter-∈ {xs = c} mem) (true→so! (the (i ＝ i) refl))
-
-member-remove-var : ∀ {x y d} → x ≠ y → y ∈ d → y ∈ rem x d
-member-remove-var ne mem =
-  ∈-filter (not-so (contra (_⁻¹ ∘ so→true!) ne)) mem
--}
-
-apply-subst-idem : ∀ {d s t} → wf-ty (minus d (dom s)) t → apply-subst s t ＝ t
-apply-subst-idem     {s = []}          {t = `` v}    wt       = refl
-apply-subst-idem {d} {s = (i , t) ∷ s} {t = `` v}    wt       =
-  Dec.elim
-    {C = λ q → apply-subst s (if ⌊ q ⌋ then t else (`` v)) ＝ (`` v)}
-    (λ evx → absurd ((so-not $ fst $ filter-∈ {xs = minus d (dom s)} wt) (true→so! (evx ⁻¹))))
-    (λ _ → apply-subst-idem {d = d} {s = s} (filter-∈ wt .snd))
-    (i ≟ v)
-apply-subst-idem     {s}               {t = p ⟶ q} (wp , wq) =
-    apply-subst-app {s = s}
-  ∙ ap² _⟶_ (apply-subst-idem {s = s} wp) (apply-subst-idem {s = s} wq)
-apply-subst-idem     {s}               {t = con}     wt        =
-  apply-subst-con {s}
 
 -- TODO actually use has-type-subst ?
 ti-correct : ∀ {Γ s1 s2 τ e}

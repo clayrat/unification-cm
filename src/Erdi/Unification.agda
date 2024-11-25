@@ -1,4 +1,4 @@
-{-# OPTIONS --safe --no-exact-split #-}
+{-# OPTIONS --safe #-}
 module Erdi.Unification where
 
 open import Prelude
@@ -40,9 +40,6 @@ substitute s (t ⟶ u) = (substitute s t) ⟶ (substitute s u)
 _◇_ : ∀ {l m n} → (m ⇝ n) → (l ⇝ m) → (l ⇝ n)
 f ◇ g = substitute f ∘ g
 
--- _⇝=_ : ∀ {m n} → m ⇝ n → m ⇝ n → 𝒰
--- _⇝=_ {m} p q = ∀ (f : Fin m) → p f ＝ q f
-
 substitute-id : {m : ℕ} (t : Ty m) → substitute ⇝id t ＝ t
 substitute-id (`` x)    = refl
 substitute-id (p ⟶ q) = ap² _⟶_ (substitute-id p) (substitute-id q)
@@ -57,6 +54,16 @@ substitute-comp con       = refl
 substitute-rename : {l m n : ℕ} {f : m ⇝ n} {r : l ↦ m}
                   → f ◇ rename r ＝ f ∘ r
 substitute-rename = fun-ext λ f → refl
+
+◇-id-l : ∀ {m n} {f : m ⇝ n} → (⇝id ◇ f) ＝ f
+◇-id-l {f} = fun-ext (substitute-id ∘ f)
+
+◇-id-r : ∀ {m n} {f : m ⇝ n} → (f ◇ ⇝id) ＝ f
+◇-id-r = refl
+
+◇-assoc : ∀ {m n k p} {f : k ⇝ p} {g : n ⇝ k} {h : m ⇝ n}
+         → (f ◇ g) ◇ h ＝ f ◇ (g ◇ h)
+◇-assoc {h} = fun-ext (substitute-comp ∘ h)
 
 -- thinning
 
@@ -100,7 +107,6 @@ thick-inv              fzero    y       = refl
 thick-inv {n = suc n} (fsuc x)  fzero   = refl
 thick-inv {n = suc n} (fsuc x) (fsuc y) = ap (map fsuc) (thick-inv x y)
 
-
 check : ∀ {n} → Var (suc n) → Ty (suc n) → Maybe (Ty n)
 check x (`` y)    = ``_ <$> thick x y
 check x (p ⟶ q) = _⟶_ <$> check x p <*> check x q
@@ -131,7 +137,7 @@ sub = star-foldr {S = _⇝_} ⇝id
 _⇝⋆□ : ℕ → 𝒰
 m ⇝⋆□ = Σ[ n ꞉ ℕ ] (m ⇝⋆ n)
 
-_/_◅?_ : ∀ {m} (t′ : Ty m) (x : Var (suc m)) → m ⇝⋆□ → suc m ⇝⋆□
+_/_◅?_ : ∀ {m} → Ty m → Var (suc m) → m ⇝⋆□ → suc m ⇝⋆□
 t′ / x ◅? (n , σ) = n , (t′ / x) ◅ σ
 
 -- unification
@@ -161,3 +167,101 @@ amgu  s           t         (n , _◅_ {x = suc y} (r / z) σ) = -- omitting the
 
 mgu : ∀ {m} → Ty m → Ty m → Maybe (m ⇝⋆□)
 mgu {m} s t = amgu s t (m , ε refl)
+
+-- substitution properties
+
+⇝P : ℕ → 𝒰₁
+⇝P m = ∀ {n} → m ⇝ n → 𝒰
+
+⇝P∅ : ∀ {m} → ⇝P m → 𝒰
+⇝P∅ {m} p = ∀ {n} (f : m ⇝ n) → ¬ p f
+
+⇝P× : ∀ {m} → ⇝P m → ⇝P m → ⇝P m
+⇝P× p q f = p f × q f
+
+⇝P◇ : ∀ {m n} → ⇝P m → m ⇝ n → ⇝P n
+⇝P◇ {m} {n} p f {n = k} g = p (g ◇ f)
+
+--⇝P◇-comp : ∀ {m n k} {g : n ⇝ k} {f : m ⇝ n} {p : ⇝P m}
+--          → ⇝P◇ (⇝P◇ p g) f ≃
+
+-- unifier
+
+unifies : ∀ {m} → Ty m → Ty m → ⇝P m
+unifies s t f = substitute f s ＝ substitute f t
+
+unifies-comm : ∀ {m n} {s t : Ty m} {f : m ⇝ n}
+             → unifies s t f ≃ unifies t s f
+unifies-comm {s} {t} = prop-extₑ! _⁻¹ _⁻¹
+
+unifies-fork : ∀ {m n} {s₁ t₁ s₂ t₂ : Ty m} {f : m ⇝ n}
+             → unifies (s₁ ⟶ s₂) (t₁ ⟶ t₂) f ≃ unifies s₁ t₁ f × unifies s₂ t₂ f
+unifies-fork {s₁} {t₁} {s₂} {t₂} =
+  prop-extₑ! ⟶-inj λ (x , y) → ap² _⟶_ x y
+
+unifies-comp : ∀ {m n k q} {s t : Ty m} {f : n ⇝ k} {g : m ⇝ n} {h : k ⇝ q}
+             → ⇝P◇ (unifies s t) (f ◇ g) h ≃ ⇝P◇ (unifies (substitute g s) (substitute g t)) f h
+unifies-comp {s} {t} {g} =
+  prop-extₑ!
+    (λ e → substitute-comp s ⁻¹ ∙ subst (unifies s t) (◇-assoc {h = g} ⁻¹) e ∙ substitute-comp t)
+    λ e → subst (unifies s t) (◇-assoc {h = g}) (substitute-comp s ∙ e ∙ substitute-comp t ⁻¹)
+
+-- substitution order
+
+_≤⇝_ : ∀ {m n k} → m ⇝ n → m ⇝ k → 𝒰
+f ≤⇝ g = fibre (_◇ g) f
+
+≤⇝-refl : ∀ {m n} {f : m ⇝ n} → f ≤⇝ f
+≤⇝-refl = ⇝id , ◇-id-l
+
+≤⇝-trans : ∀ {m n k p} {f : m ⇝ n} {g : m ⇝ k} {h : m ⇝ p}
+          → f ≤⇝ g → g ≤⇝ h → f ≤⇝ h
+≤⇝-trans {h} (fg , efg) (gh , ehg) = fg ◇ gh , ◇-assoc {h = h} ∙ ap (fg ◇_) ehg ∙ efg
+
+≤⇝-id : ∀ {m n} {f : m ⇝ n} → f ≤⇝ ⇝id
+≤⇝-id {f} = f , ◇-id-r
+
+≤⇝-◇-r : ∀ {m n k p} {f : n ⇝ k} {g : n ⇝ p} {h : m ⇝ n}
+        → f ≤⇝ g → (f ◇ h) ≤⇝ (g ◇ h)
+≤⇝-◇-r {h} (fg , efg) = fg , ◇-assoc {h = h} ⁻¹ ∙ ap (_◇ h) efg
+
+Max⇝ : ∀ {m} → ⇝P m → ⇝P m
+Max⇝ {m} p {n} f = p f × (∀ {k} (f′ : m ⇝ k) → p f′ → f′ ≤⇝ f)
+
+DCl : ∀ {m} → ⇝P m → 𝒰
+DCl {m} p = ∀ {n k} (f : m ⇝ n) (g : m ⇝ k) → f ≤⇝ g → p g → p f
+
+DCl-unifies : ∀ {m} {s t : Ty m} → DCl (unifies s t)
+DCl-unifies {s} {t} f g (h , e) u =
+  subst (unifies s t) e $
+  substitute-comp s ∙ ap (substitute h) u ∙ substitute-comp t ⁻¹
+
+optimist-lemma : ∀ {m n k l} {p q : ⇝P m} {a : m ⇝ n} {f : n ⇝ k} {g : k ⇝ l}
+               → DCl p → Max⇝ (⇝P◇ p a) f → Max⇝ (⇝P◇ q (f ◇ a)) g
+               → Max⇝ (⇝P◇ (⇝P× p q) a) (g ◇ f)
+optimist-lemma {q} {a} {f} {g} dc (pfa , pmax) (qgfa , qmax) =
+  ( dc ((g ◇ f) ◇ a) (f ◇ a) (g , ◇-assoc {h = a} ⁻¹) pfa
+  , subst q (◇-assoc {h = a} ⁻¹) qgfa)
+  , λ f′ → λ where (pfa , qfa) →
+                      let (j , ea) = pmax f′ pfa in
+                      subst (_≤⇝ (g ◇ f)) ea $
+                      ≤⇝-◇-r {h = f} $
+                      qmax j $
+                      subst q (ap (_◇ a) (ea ⁻¹) ∙ ◇-assoc {h = a}) qfa
+
+failure-propagation-lemma1 : ∀ {m n} {p q : ⇝P m} {a : m ⇝ n}
+                           → ⇝P∅ (⇝P◇ p a) → ⇝P∅ (⇝P◇ (⇝P× p q) a)
+failure-propagation-lemma1 np g pq = np g (pq .fst)
+
+failure-propagation-lemma2 : ∀ {m n k} {p q : ⇝P m} {a : m ⇝ n} {f : n ⇝ k}
+                           → Max⇝ (⇝P◇ p a) f → ⇝P∅ (⇝P◇ q (f ◇ a))
+                           → ⇝P∅ (⇝P◇ (⇝P× p q) a)
+failure-propagation-lemma2 {q} {a} {f} (paf , pmax) np g pq =
+  let (s , e) = pmax g (pq .fst) in
+  np s $ subst q (◇-assoc {h = a}) $ subst (λ qq → q (qq ◇ a)) (e ⁻¹) (pq .snd)
+
+-- simple unification problem
+
+trivial-problem-lemma : ∀ {m n} {t : Ty m} {f : m ⇝ n}
+                      → Max⇝ (⇝P◇ (unifies t t) f) ⇝id
+trivial-problem-lemma = refl , λ f′ _ → ≤⇝-id

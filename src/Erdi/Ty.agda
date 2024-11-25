@@ -8,7 +8,6 @@ open import Data.Bool
 open import Data.Reflects as Reflects
 open import Data.Dec as Dec
 open import Data.Nat
---open import Data.Nat.Order.Base
 open import Data.Fin.Inductive
 
 -- vars
@@ -95,13 +94,7 @@ instance
   Ty-is-discrete {x} {y} .does = x ==ty y
   Ty-is-discrete .proof = ty-eq-reflects
 
-{-
-ty-size : Ty → ℕ
-ty-size (p ⟶ q) = suc (ty-size p + ty-size q)
-ty-size _        = 1
+  H-Level-Ty : ∀ {n m} → H-Level (2 + n) (Ty m)
+  H-Level-Ty = hlevel-basic-instance 2 (is-discrete→is-set auto)
+  {-# OVERLAPPING H-Level-Ty #-}
 
-0<ty-size : ∀ {t} → 0 < ty-size t
-0<ty-size {t = `` _}    = z<s
-0<ty-size {t = _ ⟶ _} = z<s
-0<ty-size {t = con}     = z<s
--}

@@ -9,6 +9,9 @@ open import Data.Fin.Inductive
 open import Data.Maybe as Maybe
 open import Data.Maybe.Correspondences.Unary.Partial
 open import Data.Star
+open import Data.Sum as Sum
+open import Data.List
+open import Data.List.Operations.Properties
 
 open import Erdi.Ty
 
@@ -102,6 +105,10 @@ thick-thin {n = suc n} (fsuc x)  fzero   = justP refl
 thick-thin {n = suc n} (fsuc x) (fsuc y) =
   Part-map (ap fsuc) (ap fsuc) (thick-thin x y)
 
+thick-nofix : ∀ {n} x → thick {n} x x ＝ nothing
+thick-nofix              fzero   = refl
+thick-nofix {n = suc n} (fsuc x) = ap (map fsuc) (thick-nofix x)
+
 thick-inv : ∀ {n} x y → thick {n} x (thin x y) ＝ just y
 thick-inv              fzero    y       = refl
 thick-inv {n = suc n} (fsuc x)  fzero   = refl
@@ -113,32 +120,39 @@ check x (p ⟶ q) = _⟶_ <$> check x p <*> check x q
 check x  con      = just con
 
 infix 5 _≔_
-_≔_ : {n : ℕ} → Ty n → Var (suc n) → (suc n ⇝ n)
-(t ≔ x) y = Maybe.rec t ``_ (thick x y)
+_≔_ : {n : ℕ} → Var (suc n) → Ty n →  (suc n ⇝ n)
+(x ≔ t) y = Maybe.rec t ``_ (thick x y)
 
-for-thin : ∀ {n} {t : Ty n} {x y} → (t ≔ x) (thin x y) ＝ `` y
+for-thin : ∀ {n} {t : Ty n} {x y} → (x ≔ t) (thin x y) ＝ `` y
 for-thin {t} {x} {y} = ap (Maybe.rec t ``_) (thick-inv x y)
 
--- for-unify : ∀ {n} x (t : Term (suc n)) {t′ : Term n} → check x t ≡ just t′
---           → substitute (t′ for x) t ≡ (t′ for x) x
+for-same : ∀ {n} {t : Ty n} {x} → (x ≔ t) x ＝ t
+for-same {t} {x} = ap (Maybe.rec t ``_) (thick-nofix x)
 
--- AList
+-- chain of substitutions
 
 data _//_ : ℕ → ℕ → 𝒰 where
-  _/_ : ∀ {m} → Ty m → Var (suc m) → suc m // m
+  _／_ : ∀ {m} → Ty m → Var (suc m) → suc m // m
 
 _⇝⋆_ : ℕ → ℕ → 𝒰
 m ⇝⋆ n = Star _//_ m n
 
+-- collapse the chain into a mathematical substitution
 sub : ∀ {m n} → m ⇝⋆ n → m ⇝ n
 sub = star-foldr {S = _⇝_} ⇝id
-        (λ where (t′ / v) yz → yz ◇ (t′ ≔ v))
+        (λ where (t′ ／ v) yz → yz ◇ (v ≔ t′))
+
+sub-refl : ∀ {m} → sub {m} refl ＝ ⇝id
+sub-refl = transport-refl ``_
+
+sub-sng : ∀ {m x t} → sub {n = m} (star-sng (t ／ x)) ＝ (x ≔ t)
+sub-sng {x} {t} = ap (_◇ (x ≔ t)) sub-refl ∙ ◇-id-l
 
 _⇝⋆□ : ℕ → 𝒰
 m ⇝⋆□ = Σ[ n ꞉ ℕ ] (m ⇝⋆ n)
 
-_/_◅?_ : ∀ {m} → Ty m → Var (suc m) → m ⇝⋆□ → suc m ⇝⋆□
-t′ / x ◅? (n , σ) = n , (t′ / x) ◅ σ
+_／_◅?_ : ∀ {m} → Ty m → Var (suc m) → m ⇝⋆□ → suc m ⇝⋆□
+t′ ／ x ◅? (n , σ) = n , (t′ ／ x) ◅ σ
 
 -- unification
 
@@ -146,12 +160,12 @@ flex-flex : ∀ {m} → Var m → Var m → m ⇝⋆□
 flex-flex {m = suc m} x y =
   Maybe.rec
     (suc m , ε refl)
-    (λ y′ → m , star-sng ((`` y′) / x))
+    (λ y′ → m , star-sng ((`` y′) ／ x))
     (thick x y)
 
 flex-rigid : ∀ {m} → Var m → Ty m → Maybe (m ⇝⋆□)
 flex-rigid {m = suc m} x t =
-  map (λ t′ → m , star-sng (t′ / x)) (check x t)
+  map (λ t′ → m , star-sng (t′ ／ x)) (check x t)
 
 amgu : ∀ {m} → Ty m → Ty m → m ⇝⋆□ → Maybe (m ⇝⋆□)
 amgu  con         con        acc                            = just acc
@@ -161,9 +175,9 @@ amgu (ps ⟶ qs) (pt ⟶ qt)  acc                            = amgu ps pt acc >>
 amgu (`` xs)     (`` xt)    (n , ε e)                       = just (flex-flex xs xt)
 amgu (`` xs)      t         (n , ε e)                       = flex-rigid xs t
 amgu  s          (`` xt)    (n , ε e)                       = flex-rigid xt s
-amgu  s           t         (n , _◅_ {x = suc y} (r / z) σ) = -- omitting the match on x triggers a termination error
-  map (r / z ◅?_) $
-  amgu (substitute (r ≔ z) s) (substitute (r ≔ z) t) (n , σ)
+amgu  s           t         (n , _◅_ {x = suc y} (r ／ z) σ) = -- omitting the match on x triggers a termination error
+  map (r ／ z ◅?_) $
+  amgu (substitute (z ≔ r) s) (substitute (z ≔ r) t) (n , σ)
 
 mgu : ∀ {m} → Ty m → Ty m → Maybe (m ⇝⋆□)
 mgu {m} s t = amgu s t (m , ε refl)
@@ -181,9 +195,6 @@ mgu {m} s t = amgu s t (m , ε refl)
 
 ⇝P◇ : ∀ {m n} → ⇝P m → m ⇝ n → ⇝P n
 ⇝P◇ {m} {n} p f {n = k} g = p (g ◇ f)
-
---⇝P◇-comp : ∀ {m n k} {g : n ⇝ k} {f : m ⇝ n} {p : ⇝P m}
---          → ⇝P◇ (⇝P◇ p g) f ≃
 
 -- unifier
 
@@ -225,6 +236,7 @@ f ≤⇝ g = fibre (_◇ g) f
         → f ≤⇝ g → (f ◇ h) ≤⇝ (g ◇ h)
 ≤⇝-◇-r {h} (fg , efg) = fg , ◇-assoc {h = h} ⁻¹ ∙ ap (_◇ h) efg
 
+-- maximal substitution satisfying a property
 Max⇝ : ∀ {m} → ⇝P m → ⇝P m
 Max⇝ {m} p {n} f = p f × (∀ {k} (f′ : m ⇝ k) → p f′ → f′ ≤⇝ f)
 
@@ -265,3 +277,106 @@ failure-propagation-lemma2 {q} {a} {f} (paf , pmax) np g pq =
 trivial-problem-lemma : ∀ {m n} {t : Ty m} {f : m ⇝ n}
                       → Max⇝ (⇝P◇ (unifies t t) f) ⇝id
 trivial-problem-lemma = refl , λ f′ _ → ≤⇝-id
+
+variable-elim-lemma : ∀ {m} {x : Var (suc m)} {t : Ty m}
+                    → Max⇝ (unifies (`` x) (substitute (rename (thin x)) t)) (x ≔ t)
+variable-elim-lemma {x} {t} =
+    for-same {x = x} ∙ substitute-id t ⁻¹ ∙ ap (λ q → substitute q t) (fun-ext λ y → for-thin {x = x} ⁻¹) ∙ substitute-comp t
+  , λ f′ u → (f′ ∘ thin x)
+  , fun-ext λ y →
+      Maybe.elim
+        (λ q → thick x y ＝ q → thick-spec x y q → (((f′ ∘ thin x) ◇ (x ≔ t)) y) ＝ f′ y)
+        (λ et p →   ap (λ q → substitute (f′ ∘ thin x) (Maybe.rec t ``_ q)) et ∙ substitute-comp t ∙ u ⁻¹ ∙ ap f′ (Part-nothing p ⁻¹))
+        (λ j et p → ap (λ q → substitute (f′ ∘ thin x) (Maybe.rec t ``_ q)) et ∙ ap f′ (Part-just p ⁻¹))
+        (thick x y) refl (thick-thin x y)
+
+Step : ℕ → 𝒰
+Step n = Ty n ⊎ Ty n
+
+-- one-hole context
+Ctx1 : ℕ → 𝒰
+Ctx1 n = List (Step n)
+
+-- plugging the hole
+_+:_ : ∀ {n} → Ctx1 n → Ty n → Ty n
+[]           +: t = t
+(inl r ∷ ps) +: t = (ps +: t) ⟶ r
+(inr l ∷ ps) +: t = l ⟶ (ps +: t)
+
++:-++ : ∀ {n} {ps qs : Ctx1 n} {t} → (ps ++ qs) +: t ＝ ps +: (qs +: t)
++:-++ {ps = []}         = refl
++:-++ {ps = inl r ∷ ps} = ap (_⟶ r) (+:-++ {ps = ps})
++:-++ {ps = inr l ∷ ps} = ap (l ⟶_) (+:-++ {ps = ps})
+
+substitute-steps : {m n : ℕ} → (m ⇝ n) → Ctx1 m → Ctx1 n
+substitute-steps f = map (Sum.dmap (substitute f) (substitute f))
+
++:-subst : ∀ {m n} {f : m ⇝ n} {ps : Ctx1 m} {t}
+         → substitute f (ps +: t) ＝ substitute-steps f ps +: substitute f t
++:-subst     {ps = []}         = refl
++:-subst {f} {ps = inl r ∷ ps} = ap (_⟶ substitute f r) (+:-subst {ps = ps})
++:-subst {f} {ps = inr l ∷ ps} = ap (substitute f l ⟶_) (+:-subst {ps = ps})
+
+check-spec : {n : ℕ} → Var (suc n) → Ty (suc n) → Maybe (Ty n) → 𝒰
+check-spec {n} x t m =
+  Part (Σ[ ps ꞉ List (Step (suc n)) ] (t ＝ ps +: (`` x)))
+       (λ t′ → t ＝ substitute (rename (thin x)) t′) m
+
+check-correct : ∀ {n} x t → check-spec x t (check {n} x t)
+check-correct x (`` y)    =
+  Part-map
+    (λ e → [] , ap ``_ e)
+    (λ e → ap ``_ e)
+    (thick-thin x y)
+check-correct x (p ⟶ q) =
+  Part-map2
+    (λ where (psq , eq) → inl q ∷ psq , ap (_⟶ q) eq)
+    (λ where (psp , ep) → inr p ∷ psp , ap (p ⟶_) ep)
+    (λ ep eq → ap² _⟶_ ep eq)
+    (check-correct x p)
+    (check-correct x q)
+check-correct x con       = justP refl
+
+no-cycle-lemma : ∀ {n} {ps : Ctx1 n} {t} → ps +: t ＝ t → ps ＝ []
+no-cycle-lemma {ps = []}                       e = refl
+no-cycle-lemma {ps = inl r ∷ ps} {t = `` x}    e = ⊥.absurd (``≠⟶ (e ⁻¹))
+no-cycle-lemma {ps = inr l ∷ ps} {t = `` x}    e = ⊥.absurd (``≠⟶ (e ⁻¹))
+no-cycle-lemma {ps = inl r ∷ ps} {t = p ⟶ q} e =
+  let (ep , _) = ⟶-inj e in
+  false! (no-cycle-lemma {ps = ps ∷r inl q} {t = p}
+          (ap (_+: p) (snoc-append ps) ∙ +:-++ {ps = ps}  ∙ ep))
+no-cycle-lemma {ps = inr l ∷ ps} {t = p ⟶ q} e =
+  let (_ , eq) = ⟶-inj e in
+  false! (no-cycle-lemma {ps = ps ∷r inr p} {t = q}
+          (ap (_+: q) (snoc-append ps) ∙ +:-++ {ps = ps}  ∙ eq))
+no-cycle-lemma {ps = inl r ∷ ps} {t = con}     e = ⊥.absurd (⟶≠con e)
+no-cycle-lemma {ps = inr l ∷ ps} {t = con}     e = ⊥.absurd (⟶≠con e)
+
+no-unify-+var : ∀ {m} {x : Var m} {p ps}
+             → ⇝P∅ (unifies (`` x) ((p ∷ ps) +: (`` x)))
+no-unify-+var {p} {ps} f u =
+  false! $ no-cycle-lemma ((u ∙ +:-subst {f = f} {ps = p ∷ ps}) ⁻¹)
+
+amgu-spec : ∀ {m} → Ty m → Ty m → m ⇝⋆□ → Maybe (m ⇝⋆□) → 𝒰
+amgu-spec {m} s t (l , ρ) ms =
+  Part (⇝P∅ (⇝P◇ (unifies s t) (sub ρ)))
+       (λ where (n , σ) → Σ[ τ ꞉ l ⇝⋆ n ] (σ ＝ ρ ∙ τ) × Max⇝ (⇝P◇ (unifies s t) (sub ρ)) (sub τ))
+       ms
+
+flex-flex-correct : ∀ {m} {x y : Var m}
+                  → Max⇝ (unifies (`` x) (`` y)) (sub (flex-flex x y .snd))
+flex-flex-correct {m = suc m} {x} {y} =
+  Maybe.elim
+     (λ q → thick-spec x y q
+          → Max⇝ (unifies (`` x) (`` y))
+                  (sub ((Maybe.rec {B = suc m ⇝⋆□}
+                                  (suc m , ε refl)
+                                  (λ y′ → m , star-sng ((`` y′) ／ x)) q) .snd)))
+     (λ p → subst (Max⇝ (unifies (`` x) (`` y))) (sub-refl ⁻¹) $
+               subst (λ q → Max⇝ (unifies (`` x) (`` q)) ⇝id) (Part-nothing p ⁻¹) $
+               trivial-problem-lemma {t = `` x} {f = ⇝id})
+     (λ j p → subst (Max⇝ (unifies (`` x) (`` y))) (sub-sng {x = x} ⁻¹) $
+                 subst (λ q → Max⇝ (unifies (`` x) (`` q)) (x ≔ (`` j))) (Part-just p ⁻¹) $
+                 variable-elim-lemma)
+     (thick x y) (thick-thin x y)
+

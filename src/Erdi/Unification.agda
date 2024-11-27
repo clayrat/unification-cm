@@ -138,15 +138,28 @@ _⇝⋆_ : ℕ → ℕ → 𝒰
 m ⇝⋆ n = Star _//_ m n
 
 -- collapse the chain into a mathematical substitution
+
+conv : ∀ {x y} → x // y → x ⇝ y
+conv (t′ ／ v) = (v ≔ t′)
+
 sub : ∀ {m n} → m ⇝⋆ n → m ⇝ n
-sub = star-foldr {S = _⇝_} ⇝id
-        (λ where (t′ ／ v) yz → yz ◇ (v ≔ t′))
+sub = star-foldr {S = _⇝_} ⇝id (flip _◇_ ∘ conv)
 
 sub-refl : ∀ {m} → sub {m} refl ＝ ⇝id
-sub-refl = transport-refl ``_
+sub-refl {m} = star-foldr-emp (λ {x} → ⇝id {m = x}) {tr = flip _◇_ ∘ conv}
+
+sub-◅ : ∀ {m n} {p : suc m // m} {s} → sub {m = suc m} {n = n} (p ◅ s) ＝ sub s ◇ conv p
+sub-◅ = refl
 
 sub-sng : ∀ {m x t} → sub {n = m} (star-sng (t ／ x)) ＝ (x ≔ t)
 sub-sng {x} {t} = ap (_◇ (x ≔ t)) sub-refl ∙ ◇-id-l
+
+sub-◇ : ∀ {m n k} {α : m ⇝⋆ n} {β : n ⇝⋆ k}
+       → sub {m} (α ∙ β) ＝ sub β ◇ sub α
+sub-◇ {α} {β} =
+  star-foldr-trans-morph ⇝id conv (flip _◇_)
+    ◇-id-r (λ {x} {y} {z} {w} {a} {b} {c} → ◇-assoc {f = c} {g = b} {h = a})
+    α β
 
 _⇝⋆□ : ℕ → 𝒰
 m ⇝⋆□ = Σ[ n ꞉ ℕ ] (m ⇝⋆ n)
@@ -175,7 +188,7 @@ amgu (ps ⟶ qs) (pt ⟶ qt)  acc                            = amgu ps pt acc >>
 amgu (`` xs)     (`` xt)    (n , ε e)                       = just (flex-flex xs xt)
 amgu (`` xs)      t         (n , ε e)                       = flex-rigid xs t
 amgu  s          (`` xt)    (n , ε e)                       = flex-rigid xt s
-amgu  s           t         (n , _◅_ {x = suc y} (r ／ z) σ) = -- omitting the match on x triggers a termination error
+amgu  s           t         (n , _◅_ {x = suc m} (r ／ z) σ) = -- omitting the match on x triggers a termination error
   map (r ／ z ◅?_) $
   amgu (substitute (z ≔ r) s) (substitute (z ≔ r) t) (n , σ)
 
@@ -190,11 +203,21 @@ mgu {m} s t = amgu s t (m , ε refl)
 ⇝P∅ : ∀ {m} → ⇝P m → 𝒰
 ⇝P∅ {m} p = ∀ {n} (f : m ⇝ n) → ¬ p f
 
+⇝P≃ : ∀ {m} → ⇝P m → ⇝P m → 𝒰
+⇝P≃ {m} p q = ∀ {n} (f : m ⇝ n) → p f ≃ q f
+
+⇝P∅≃ : ∀ {m} {p q : ⇝P m} → ⇝P≃ p q → ⇝P∅ p ≃ ⇝P∅ q
+⇝P∅≃ {p} {q} eq =
+  prop-extₑ! (λ np f qf → np f (eq f ⁻¹ $ qf)) (λ nq f pf → nq f (eq f $ pf))
+
 ⇝P× : ∀ {m} → ⇝P m → ⇝P m → ⇝P m
 ⇝P× p q f = p f × q f
 
 ⇝P◇ : ∀ {m n} → ⇝P m → m ⇝ n → ⇝P n
 ⇝P◇ {m} {n} p f {n = k} g = p (g ◇ f)
+
+⇝P◇≃ : ∀ {m n} {p q : ⇝P m} {f : m ⇝ n} → ⇝P≃ p q → ⇝P≃ (⇝P◇ p f) (⇝P◇ q f)
+⇝P◇≃ {f} eq g = eq (g ◇ f)
 
 -- unifier
 
@@ -240,6 +263,9 @@ f ≤⇝ g = fibre (_◇ g) f
 Max⇝ : ∀ {m} → ⇝P m → ⇝P m
 Max⇝ {m} p {n} f = p f × (∀ {k} (f′ : m ⇝ k) → p f′ → f′ ≤⇝ f)
 
+Max⇝≃ : ∀ {m} {p q : ⇝P m} → ⇝P≃ p q → ⇝P≃ (Max⇝ p) (Max⇝ q)
+Max⇝≃ eq f = ×-ap (eq f) (∀-cod-≃ λ x → Π-cod-≃ λ f′ → Π-dom-≃ (eq f′ ⁻¹))
+
 DCl : ∀ {m} → ⇝P m → 𝒰
 DCl {m} p = ∀ {n k} (f : m ⇝ n) (g : m ⇝ k) → f ≤⇝ g → p g → p f
 
@@ -281,13 +307,18 @@ trivial-problem-lemma = refl , λ f′ _ → ≤⇝-id
 variable-elim-lemma : ∀ {m} {x : Var (suc m)} {t : Ty m}
                     → Max⇝ (unifies (`` x) (substitute (rename (thin x)) t)) (x ≔ t)
 variable-elim-lemma {x} {t} =
-    for-same {x = x} ∙ substitute-id t ⁻¹ ∙ ap (λ q → substitute q t) (fun-ext λ y → for-thin {x = x} ⁻¹) ∙ substitute-comp t
+      for-same {x = x} ∙ substitute-id t ⁻¹
+    ∙ ap (λ q → substitute q t) (fun-ext λ y → for-thin {x = x} ⁻¹)
+    ∙ substitute-comp t
   , λ f′ u → (f′ ∘ thin x)
   , fun-ext λ y →
       Maybe.elim
         (λ q → thick x y ＝ q → thick-spec x y q → (((f′ ∘ thin x) ◇ (x ≔ t)) y) ＝ f′ y)
-        (λ et p →   ap (λ q → substitute (f′ ∘ thin x) (Maybe.rec t ``_ q)) et ∙ substitute-comp t ∙ u ⁻¹ ∙ ap f′ (Part-nothing p ⁻¹))
-        (λ j et p → ap (λ q → substitute (f′ ∘ thin x) (Maybe.rec t ``_ q)) et ∙ ap f′ (Part-just p ⁻¹))
+        (λ et p →   ap (λ q → substitute (f′ ∘ thin x) (Maybe.rec t ``_ q)) et
+                  ∙ substitute-comp t ∙ u ⁻¹
+                  ∙ ap f′ (Part-nothing p ⁻¹))
+        (λ j et p →   ap (λ q → substitute (f′ ∘ thin x) (Maybe.rec t ``_ q)) et
+                    ∙ ap f′ (Part-just p ⁻¹))
         (thick x y) refl (thick-thin x y)
 
 Step : ℕ → 𝒰
@@ -357,26 +388,196 @@ no-unify-+var : ∀ {m} {x : Var m} {p ps}
 no-unify-+var {p} {ps} f u =
   false! $ no-cycle-lemma ((u ∙ +:-subst {f = f} {ps = p ∷ ps}) ⁻¹)
 
+flex-flex-correct : ∀ {m} {x y : Var m}
+                  → Max⇝ (unifies (`` x) (`` y)) (sub (flex-flex x y .snd))
+flex-flex-correct {m = suc m} {x} {y} =
+  Maybe.elim
+    (λ q → thick-spec x y q
+         → Max⇝ (unifies (`` x) (`` y))
+                 (sub ((Maybe.rec {B = suc m ⇝⋆□}
+                                 (suc m , ε refl)
+                                 (λ y′ → m , star-sng ((`` y′) ／ x)) q) .snd)))
+    (λ p → subst (Max⇝ (unifies (`` x) (`` y))) (sub-refl ⁻¹) $
+              subst (λ q → Max⇝ (unifies (`` x) (`` q)) ⇝id) (Part-nothing p ⁻¹) $
+              trivial-problem-lemma {t = `` x} {f = ⇝id})
+    (λ j p → subst (Max⇝ (unifies (`` x) (`` y))) (sub-sng {x = x} ⁻¹) $
+                subst (λ q → Max⇝ (unifies (`` x) (`` q)) (x ≔ (`` j))) (Part-just p ⁻¹) $
+                variable-elim-lemma)
+    (thick x y) (thick-thin x y)
+
 amgu-spec : ∀ {m} → Ty m → Ty m → m ⇝⋆□ → Maybe (m ⇝⋆□) → 𝒰
 amgu-spec {m} s t (l , ρ) ms =
   Part (⇝P∅ (⇝P◇ (unifies s t) (sub ρ)))
        (λ where (n , σ) → Σ[ τ ꞉ l ⇝⋆ n ] (σ ＝ ρ ∙ τ) × Max⇝ (⇝P◇ (unifies s t) (sub ρ)) (sub τ))
        ms
 
-flex-flex-correct : ∀ {m} {x y : Var m}
-                  → Max⇝ (unifies (`` x) (`` y)) (sub (flex-flex x y .snd))
-flex-flex-correct {m = suc m} {x} {y} =
-  Maybe.elim
-     (λ q → thick-spec x y q
-          → Max⇝ (unifies (`` x) (`` y))
-                  (sub ((Maybe.rec {B = suc m ⇝⋆□}
-                                  (suc m , ε refl)
-                                  (λ y′ → m , star-sng ((`` y′) ／ x)) q) .snd)))
-     (λ p → subst (Max⇝ (unifies (`` x) (`` y))) (sub-refl ⁻¹) $
-               subst (λ q → Max⇝ (unifies (`` x) (`` q)) ⇝id) (Part-nothing p ⁻¹) $
-               trivial-problem-lemma {t = `` x} {f = ⇝id})
-     (λ j p → subst (Max⇝ (unifies (`` x) (`` y))) (sub-sng {x = x} ⁻¹) $
-                 subst (λ q → Max⇝ (unifies (`` x) (`` q)) (x ≔ (`` j))) (Part-just p ⁻¹) $
-                 variable-elim-lemma)
-     (thick x y) (thick-thin x y)
+amgu-correct : ∀ {m} s t ρ → amgu-spec {m} s t ρ (amgu s t ρ)
+amgu-correct con          con        (l , ρ)        =
+  justP ( ε refl
+        , star-trans-id-r ρ ⁻¹
+        , subst (Max⇝ (⇝P◇ (unifies con con) (sub ρ)))
+                 (sub-refl ⁻¹)
+                 (trivial-problem-lemma {t = con} {f = sub ρ}))
+amgu-correct con         (pt ⟶ qt)  acc        =
+  nothingP (λ f e → ⟶≠con (e ⁻¹))
+amgu-correct (ps ⟶ qs)   con        acc        =
+  nothingP (λ f e → ⟶≠con e)
+amgu-correct (ps ⟶ qs) (pt ⟶ qt)  (l , ρ)   =
+  Part-bind
+    -- $-notation breaks down
+    (λ p {n} → (⇝P∅≃ (⇝P◇≃ {f = sub ρ} λ f →
+                    unifies-fork {s₁ = ps} {t₁ = pt} {s₂ = qs} {t₂ = qt} {f = f}) ⁻¹) .fst $
+               failure-propagation-lemma1 {n = l} {p = unifies ps pt} {q = unifies qs qt} {a = sub ρ}
+                    λ {n = n′} → p {n = n′})
+    (λ where {x = k , ζ} →
+              λ where (φ , es , mx) →
+                       Part-weaken
+                        (λ p {n} → (⇝P∅≃ (⇝P◇≃ {f = sub ρ} λ f → unifies-fork {s₁ = ps} {t₁ = pt} {s₂ = qs} {t₂ = qt} {f = f}) ⁻¹) .fst $
+                                   failure-propagation-lemma2 {n = l} {k = k} {p = unifies ps pt} {q = unifies qs qt} {a = sub ρ} {f = sub φ} mx $
+                                   subst (λ q → ⇝P∅ (⇝P◇ (unifies qs qt) q)) (ap sub es ∙ sub-◇ {α = ρ} {β = φ}) (λ {n = n′} → p {n = n′}) )
+                        (λ where {x = o , ψ} →
+                                   λ where (τ , eτ , mxτ) →
+                                              φ ∙ τ
+                                            , eτ ∙ ap (_∙ τ) es ∙ star-trans-assoc ρ φ τ
+                                            , (subst (Max⇝ (⇝P◇ (unifies (ps ⟶ qs) (pt ⟶ qt)) (sub ρ))) (sub-◇ {α = φ} {β = τ} ⁻¹) $
+                                               (Max⇝≃ (⇝P◇≃ {f = sub ρ} λ f →
+                                                  unifies-fork {s₁ = ps} {t₁ = pt} {s₂ = qs} {t₂ = qt} {f = f}) (sub τ ◇ sub φ) ⁻¹) .fst $
+                                               optimist-lemma {q = unifies qs qt} {a = sub ρ} {f = sub φ} {g = sub τ}
+                                                          (DCl-unifies {s = ps} {t = pt}) mx $
+                                               subst (λ q → Max⇝ (⇝P◇ (unifies qs qt) q) (sub τ)) (ap sub es ∙ sub-◇ {α = ρ} {β = φ}) mxτ))
+                        (amgu-correct qs qt (k , ζ)))
+    (amgu-correct ps pt (l , ρ))
+amgu-correct (`` xs) (`` xt) (n , ε e) =
+  justP $
+  Jₚ (λ k ek → let (l , σ) = flex-flex xs xt in
+               Σ[ τ ꞉ k ⇝⋆ l ] (σ ＝ ε ek ∙ τ)
+                             × Max⇝ (⇝P◇ (unifies (`` xs) (`` xt)) (sub (ε ek))) (sub τ))
+     ( let σ = flex-flex xs xt .snd in
+         σ , star-trans-id-l σ ⁻¹
+       , subst (λ q → Max⇝ (⇝P◇ (unifies (`` xs) (`` xt)) q) (sub σ))
+               (sub-refl ⁻¹)
+               flex-flex-correct)
+     e
+amgu-correct {m = suc m} (`` xs) (pt ⟶ qt) (n , ε e) =
+  Part-map
+    (λ where
+         ([] , eq)             f pu → ``≠⟶ (eq ⁻¹)
+         (p ∷ ls , eq) {n = k}      →
+            Jₚ (λ y ey → (f : y ⇝ k) → ¬ₜ ⇝P◇ (unifies (`` xs) (pt ⟶ qt)) (sub (ε ey)) f)
+                (λ f → no-unify-+var {x = xs} {p = p} {ps = ls} f ∘
+                       subst (λ q → unifies (`` xs) q f) eq ∘
+                       subst (λ q → ⇝P◇ (unifies (`` xs) (pt ⟶ qt)) q f) sub-refl)
+                e)
+    (λ {x} eq →
+       Jₚ (λ y ey → Σ[ τ ꞉ y ⇝⋆ m ] (star-sng (x ／ xs) ＝ ε ey ∙ τ) × Max⇝ (⇝P◇ (unifies (`` xs) (pt ⟶ qt)) (sub (ε ey))) (sub τ))
+          ( star-sng (x ／ xs)
+          , star-trans-id-l (star-sng (x ／ xs)) ⁻¹
+          , (subst (λ q → Max⇝ (⇝P◇ (unifies (`` xs) (pt ⟶ qt)) q) (sub (star-sng (x ／ xs)))) (sub-refl ⁻¹) $
+             subst (λ q → Max⇝ (unifies (`` xs) (pt ⟶ qt)) q) (sub-sng {x = xs} ⁻¹) $
+             subst (λ q → Max⇝ (unifies (`` xs) q) (xs ≔ x)) (eq ⁻¹) $
+             variable-elim-lemma))
+          e)
+    (check-correct xs (pt ⟶ qt))
+amgu-correct {m = suc m} (`` xs) con (n , ε e) =
+  justP $
+  Jₚ (λ y ey → Σ[ τ ꞉ y ⇝⋆ m ] (star-sng (con ／ xs) ＝ ε ey ∙ τ) × Max⇝ (⇝P◇ (unifies (`` xs) con) (sub (ε ey))) (sub τ))
+          ( star-sng (con ／ xs)
+          , star-trans-id-l (star-sng (con ／ xs)) ⁻¹
+          , (subst (λ q → Max⇝ (⇝P◇ (unifies (`` xs) con) q) (sub (star-sng (con ／ xs)))) (sub-refl ⁻¹) $
+             subst (λ q → Max⇝ (unifies (`` xs) con) q) (sub-sng {x = xs} ⁻¹) $
+             variable-elim-lemma))
+          e
+amgu-correct {m = suc m} (ps ⟶ qs) (`` xt) (n , ε e) =
+  Part-map
+    (λ where
+         ([] , eq)             f pu → ``≠⟶ (eq ⁻¹)
+         (p ∷ ls , eq) {n = k}      →
+           Jₚ (λ y ey → (f : y ⇝ k) → ¬ₜ ⇝P◇ (unifies (ps ⟶ qs) (`` xt)) (sub (ε ey)) f)
+                (λ f x → no-unify-+var {x = xt} {p = p} {ps = ls} f $
+                         unifies-comm {s = (p ∷ ls) +: (`` xt)} $
+                         subst (λ q → unifies q (`` xt) f) eq $
+                         subst (λ q → ⇝P◇ (unifies (ps ⟶ qs) (`` xt)) q f) sub-refl x)
+                e)
+    (λ {x} eq →
+       Jₚ (λ y ey → Σ[ τ ꞉ y ⇝⋆ m ] (star-sng (x ／ xt) ＝ ε ey ∙ τ) × Max⇝ (⇝P◇ (unifies (ps ⟶ qs) (`` xt)) (sub (ε ey))) (sub τ))
+          ( star-sng (x ／ xt)
+          , star-trans-id-l (star-sng (x ／ xt)) ⁻¹
+          , (subst (λ q → Max⇝ (⇝P◇ (unifies (ps ⟶ qs) (`` xt) ) q) (sub (star-sng (x ／ xt)))) (sub-refl ⁻¹) $
+             subst (λ q → Max⇝ (unifies (ps ⟶ qs) (`` xt) ) q) (sub-sng {x = xt} ⁻¹) $
+             subst (λ q → Max⇝ (unifies q (`` xt)) (xt ≔ x)) (eq ⁻¹) $
+             (Max⇝≃ (λ f → unifies-comm {s = substitute (rename (thin xt)) x}) (xt ≔ x) ⁻¹) .fst $
+             variable-elim-lemma))
+          e)
+    (check-correct xt (ps ⟶ qs))
+amgu-correct {m = suc m} con (`` xt) (n , ε e) =
+  justP $
+  Jₚ (λ y ey → Σ[ τ ꞉ y ⇝⋆ m ] (star-sng (con ／ xt) ＝ ε ey ∙ τ) × Max⇝ (⇝P◇ (unifies con (`` xt)) (sub (ε ey))) (sub τ))
+     ( star-sng (con ／ xt)
+     , star-trans-id-l (star-sng (con ／ xt)) ⁻¹
+     , (subst (λ q → Max⇝ (⇝P◇ (unifies con (`` xt)) q) (sub (star-sng (con ／ xt)))) (sub-refl ⁻¹) $
+        subst (λ q → Max⇝ (unifies con (`` xt)) q) (sub-sng {x = xt} ⁻¹) $
+        (Max⇝≃ (λ f → unifies-comm {s = con} {f = f}) (xt ≔ con) ⁻¹) .fst $
+        variable-elim-lemma))
+     e
+-- this is bullshit
+amgu-correct (`` xs)    (`` xt)     (n , _◅_ {x = suc m} (r ／ z) σ) =
+  Part-map
+    (λ np → ⇝P∅≃ (λ h → unifies-comp {s = `` xs} {t = `` xt} {f = sub σ} {g = z ≔ r} {h = h} ⁻¹) .fst (λ {n = k} → np {n = k}))
+    (λ where {x = (k , φ)} →
+               λ where (τ , eτ , mx) →
+                          τ
+                        , ap ((r ／ z) ◅_) eτ
+                        , Max⇝≃ (⇝P◇≃ (λ h′ → unifies-comp {s = `` xs} {t = `` xt} {f = sub σ} {g = z ≔ r} {h = h′} ⁻¹)) (sub τ) .fst mx)
+    (amgu-correct ((z ≔ r) xs) ((z ≔ r) xt) (n , σ))
+amgu-correct (`` xs)    (pt ⟶ qt) (n , _◅_ {x = suc m} (r ／ z) σ) =
+  Part-map
+    (λ np → ⇝P∅≃ (λ h → unifies-comp {s = `` xs} {t = pt ⟶ qt} {f = sub σ} {g = z ≔ r} {h = h} ⁻¹) .fst (λ {n = k} → np {n = k}))
+    (λ where {x = (k , φ)} →
+               λ where (τ , eτ , mx) →
+                          τ
+                        , ap ((r ／ z) ◅_) eτ
+                        , Max⇝≃ (⇝P◇≃ (λ h′ → unifies-comp {s = `` xs} {t = pt ⟶ qt} {f = sub σ} {g = z ≔ r} {h = h′} ⁻¹)) (sub τ) .fst mx)
+    (amgu-correct ((z ≔ r) xs) (substitute (z ≔ r) pt ⟶ substitute (z ≔ r) qt) (n , σ))
+amgu-correct (`` xs)     con        (n , _◅_ {x = suc m} (r ／ z) σ) =
+  Part-map
+    (λ np → ⇝P∅≃ (λ h → unifies-comp {s = `` xs} {t = con} {f = sub σ} {g = z ≔ r} {h = h} ⁻¹) .fst (λ {n = k} → np {n = k}))
+    (λ where {x = (k , φ)} →
+               λ where (τ , eτ , mx) →
+                          τ
+                        , ap ((r ／ z) ◅_) eτ
+                        , Max⇝≃ (⇝P◇≃ (λ h′ → unifies-comp {s = `` xs} {t = con} {f = sub σ} {g = z ≔ r} {h = h′} ⁻¹)) (sub τ) .fst mx)
+    (amgu-correct ((z ≔ r) xs) con (n , σ))
+amgu-correct (ps ⟶ qs) (`` xt)    (n , _◅_ {x = suc m} (r ／ z) σ) =
+  Part-map
+    (λ np → ⇝P∅≃ (λ h → unifies-comp {s = ps ⟶ qs} {t = `` xt} {f = sub σ} {g = z ≔ r} {h = h} ⁻¹) .fst (λ {n = k} → np {n = k}))
+    (λ where {x = (k , φ)} →
+               λ where (τ , eτ , mx) →
+                          τ
+                        , ap ((r ／ z) ◅_) eτ
+                        , Max⇝≃ (⇝P◇≃ (λ h′ → unifies-comp {s = ps ⟶ qs} {t = `` xt} {f = sub σ} {g = z ≔ r} {h = h′} ⁻¹)) (sub τ) .fst mx)
+    (amgu-correct (substitute (z ≔ r) ps ⟶ substitute (z ≔ r) qs) ((z ≔ r) xt) (n , σ))
+amgu-correct  con        (`` xt)    (n , _◅_ {x = suc m} (r ／ z) σ) =
+  Part-map
+    (λ np → ⇝P∅≃ (λ h → unifies-comp {s = con} {t = `` xt} {f = sub σ} {g = z ≔ r} {h = h} ⁻¹) .fst (λ {n = k} → np {n = k}))
+    (λ where {x = (k , φ)} →
+               λ where (τ , eτ , mx) →
+                          τ
+                        , ap ((r ／ z) ◅_) eτ
+                        , Max⇝≃ (⇝P◇≃ (λ h′ → unifies-comp {s = con} {t = `` xt} {f = sub σ} {g = z ≔ r} {h = h′} ⁻¹)) (sub τ) .fst mx)
+    (amgu-correct con ((z ≔ r) xt) (n , σ))
 
+mgu-spec : ∀ {m} → Ty m → Ty m → Maybe (m ⇝⋆□) → 𝒰
+mgu-spec {m} s t ms =
+  Part (⇝P∅ (unifies s t))
+       (λ where (n , σ) → Σ[ τ ꞉ m ⇝⋆ n ] Max⇝ (unifies s t) (sub σ))
+       ms
+
+mgu-correct : ∀ {m} s t → mgu-spec {m} s t (mgu s t)
+mgu-correct {m} s t =
+  Part-weaken
+    (λ np → subst (λ q → ⇝P∅ (⇝P◇ (unifies s t) q)) sub-refl λ {n = k} → np {n = k})
+    (λ where {x = (k , φ)} →
+               λ where (τ , eτ , mx) →
+                         τ , (subst (Max⇝ (unifies s t)) (ap sub (star-trans-id-l τ ⁻¹ ∙ eτ ⁻¹)) $
+                              subst (λ q → Max⇝ (⇝P◇ (unifies s t) q) (sub τ)) sub-refl mx))
+    (amgu-correct s t (m , ε refl))

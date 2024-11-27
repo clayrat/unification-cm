@@ -1,5 +1,5 @@
 {-# OPTIONS --safe #-}
-module Erdi.Ty where
+module McBride.Ty where
 
 open import Prelude
 

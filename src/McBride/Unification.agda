@@ -388,7 +388,7 @@ amgu-correct  con        (`` xt)    (n , _◅_ {x = suc m} (r ／ z) σ) =
 mgu-spec : ∀ {m} → Ty m → Ty m → Maybe (m ⇝⋆□) → 𝒰
 mgu-spec {m} s t ms =
   Part (⇝P∅ (unifies s t))
-       (λ where (n , σ) → Σ[ τ ꞉ m ⇝⋆ n ] Max⇝ (unifies s t) (sub σ))
+       (λ where (n , σ) → Max⇝ (unifies s t) (sub σ))
        ms
 
 mgu-correct : ∀ {m} s t → mgu-spec {m} s t (mgu s t)
@@ -397,6 +397,6 @@ mgu-correct {m} s t =
     (λ np → subst (λ q → ⇝P∅ (⇝P◇ (unifies s t) q)) sub-refl λ {n = k} → np {n = k})
     (λ where {x = (k , φ)} →
                λ where (τ , eτ , mx) →
-                         τ , (subst (Max⇝ (unifies s t)) (ap sub (star-trans-id-l τ ⁻¹ ∙ eτ ⁻¹)) $
-                              subst (λ q → Max⇝ (⇝P◇ (unifies s t) q) (sub τ)) sub-refl mx))
+                         (subst (Max⇝ (unifies s t)) (ap sub (star-trans-id-l τ ⁻¹ ∙ eτ ⁻¹)) $
+                          subst (λ q → Max⇝ (⇝P◇ (unifies s t) q) (sub τ)) sub-refl mx))
     (amgu-correct s t (m , ε refl))

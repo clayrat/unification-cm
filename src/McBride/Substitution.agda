@@ -187,6 +187,17 @@ Max⇝≃ eq f = ×-ap (eq f) (∀-cod-≃ λ x → Π-cod-≃ λ f′ → Π-do
 DCl : ∀ {m} → ⇝P m → 𝒰
 DCl {m} p = ∀ {n k} (f : m ⇝ n) (g : m ⇝ k) → f ≤⇝ g → p g → p f
 
+failure-propagation-lemma1 : ∀ {m n} {p q : ⇝P m} {a : m ⇝ n}
+                           → ⇝P∅ (⇝P◇ p a) → ⇝P∅ (⇝P◇ (⇝P× p q) a)
+failure-propagation-lemma1 np g pq = np g (pq .fst)
+
+failure-propagation-lemma2 : ∀ {m n k} {p q : ⇝P m} {a : m ⇝ n} {f : n ⇝ k}
+                           → Max⇝ (⇝P◇ p a) f → ⇝P∅ (⇝P◇ q (f ◇ a))
+                           → ⇝P∅ (⇝P◇ (⇝P× p q) a)
+failure-propagation-lemma2 {q} {a} {f} (paf , pmax) np g pq =
+  let (s , e) = pmax g (pq .fst) in
+  np s $ subst q (◇-assoc {h = a}) $ subst (λ qq → q (qq ◇ a)) (e ⁻¹) (pq .snd)
+
 optimist-lemma : ∀ {m n k l} {p q : ⇝P m} {a : m ⇝ n} {f : n ⇝ k} {g : k ⇝ l}
                → DCl p → Max⇝ (⇝P◇ p a) f → Max⇝ (⇝P◇ q (f ◇ a)) g
                → Max⇝ (⇝P◇ (⇝P× p q) a) (g ◇ f)
@@ -199,14 +210,3 @@ optimist-lemma {q} {a} {f} {g} dc (pfa , pmax) (qgfa , qmax) =
                       ≤⇝-◇-r {h = f} $
                       qmax j $
                       subst q (ap (_◇ a) (ea ⁻¹) ∙ ◇-assoc {h = a}) qfa
-
-failure-propagation-lemma1 : ∀ {m n} {p q : ⇝P m} {a : m ⇝ n}
-                           → ⇝P∅ (⇝P◇ p a) → ⇝P∅ (⇝P◇ (⇝P× p q) a)
-failure-propagation-lemma1 np g pq = np g (pq .fst)
-
-failure-propagation-lemma2 : ∀ {m n k} {p q : ⇝P m} {a : m ⇝ n} {f : n ⇝ k}
-                           → Max⇝ (⇝P◇ p a) f → ⇝P∅ (⇝P◇ q (f ◇ a))
-                           → ⇝P∅ (⇝P◇ (⇝P× p q) a)
-failure-propagation-lemma2 {q} {a} {f} (paf , pmax) np g pq =
-  let (s , e) = pmax g (pq .fst) in
-  np s $ subst q (◇-assoc {h = a}) $ subst (λ qq → q (qq ◇ a)) (e ⁻¹) (pq .snd)

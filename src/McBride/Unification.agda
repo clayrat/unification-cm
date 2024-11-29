@@ -11,6 +11,7 @@ open import Data.Maybe.Correspondences.Unary.Partial
 open import Data.Star
 open import Data.Sum as Sum
 open import Data.List
+open import Data.List.Correspondences.Unary.All
 open import Data.List.Operations.Properties
 
 open import McBride.Ty
@@ -70,6 +71,11 @@ amgu  s           t         (n , _◅_ {x = suc m} (r ／ z) σ) = -- omitting t
 
 mgu : ∀ {m} → Ty m → Ty m → Maybe (m ⇝⋆□)
 mgu {m} s t = amgu s t (m , ε refl)
+
+-- TODO is pre-weakening them a good idea?
+mgu-list : ∀ {m} → List (Ty m × Ty m) → Maybe (m ⇝⋆□)
+mgu-list {m} []             = just (m , ε refl)
+mgu-list     ((x , y) ∷ ls) = mgu-list ls >>= amgu x y
 
 -- check properties
 
@@ -163,6 +169,13 @@ DCl-unifies : ∀ {m} {s t : Ty m} → DCl (unifies s t)
 DCl-unifies {s} {t} f g (h , e) u =
   subst (unifies s t) e $
   substitute-comp s ∙ ap (substitute h) u ∙ substitute-comp t ⁻¹
+
+unifies-list : ∀ {m} → List (Ty m × Ty m) → ⇝P m
+unifies-list ls f = All (λ where (x , y) → unifies x y f) ls
+
+DCl-unifies-list : ∀ {m} {ls : List (Ty m × Ty m)} → DCl (unifies-list ls)
+DCl-unifies-list {ls} f g le =
+  all-map (λ where {x = x , y} → DCl-unifies {s = x} {t = y} f g le)
 
 -- simple unification problem
 
@@ -400,3 +413,32 @@ mgu-correct {m} s t =
                          (subst (Max⇝ (unifies s t)) (ap sub (star-trans-id-l τ ⁻¹ ∙ eτ ⁻¹)) $
                           subst (λ q → Max⇝ (⇝P◇ (unifies s t) q) (sub τ)) sub-refl mx))
     (amgu-correct s t (m , ε refl))
+
+mgu-list-spec : ∀ {m} → List (Ty m × Ty m) → Maybe (m ⇝⋆□) → 𝒰
+mgu-list-spec {m} ls ms =
+  Part (⇝P∅ (unifies-list ls))
+       (λ where (n , σ) → Max⇝ (unifies-list ls) (sub σ))
+       ms
+
+mgu-list-correct : ∀ {m} ls → mgu-list-spec {m} ls (mgu-list ls)
+mgu-list-correct []             =
+  justP (subst (Max⇝ (unifies-list [])) (sub-refl ⁻¹) ([] , λ f′ _ → ≤⇝-id))
+mgu-list-correct ((x , y) ∷ ls) =
+  Part-bind
+    (λ np → ⇝P∅≃ (λ f → ×-swap ∙ all-×≃ {P = λ where (x , y) → unifies x y f} ⁻¹) .fst $
+            failure-propagation-lemma1 {q = unifies x y}
+              λ {n = k} → np {n = k})
+    (λ where {x = (k , φ)} mx →
+               Part-weaken
+                 (λ np → ⇝P∅≃ (λ f → ×-swap ∙ all-×≃ {P = λ where (x , y) → unifies x y f} ⁻¹) .fst $
+                         failure-propagation-lemma2 {q = unifies x y}
+                           mx λ {n = k} → np {n = k})
+                 (λ where {x = (l , ψ)} →
+                            λ where (τ , eτ , mx′) →
+                                      subst (λ q → Max⇝ (unifies-list ((x , y) ∷ ls)) (sub q)) (eτ ⁻¹) $
+                                      subst (Max⇝ (unifies-list ((x , y) ∷ ls))) (sub-◇ {α = φ} ⁻¹) $
+                                      Max⇝≃ (λ f → ×-swap ∙ all-×≃ {P = λ where (x , y) → unifies x y f} ⁻¹) (sub τ ◇ sub φ) .fst $
+                                      optimist-lemma {a = ⇝id} DCl-unifies-list mx mx′)
+                 (amgu-correct x y (k , φ)))
+    (mgu-list-correct ls)
+

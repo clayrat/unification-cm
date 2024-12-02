@@ -194,7 +194,7 @@ failure-propagation-lemma1 np g pq = np g (pq .fst)
 failure-propagation-lemma2 : ∀ {m n k} {p q : ⇝P m} {a : m ⇝ n} {f : n ⇝ k}
                            → Max⇝ (⇝P◇ p a) f → ⇝P∅ (⇝P◇ q (f ◇ a))
                            → ⇝P∅ (⇝P◇ (⇝P× p q) a)
-failure-propagation-lemma2 {q} {a} {f} (paf , pmax) np g pq =
+failure-propagation-lemma2 {q} {a} (paf , pmax) np g pq =
   let (s , e) = pmax g (pq .fst) in
   np s $ subst q (◇-assoc {h = a}) $ subst (λ qq → q (qq ◇ a)) (e ⁻¹) (pq .snd)
 

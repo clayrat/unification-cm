@@ -367,7 +367,7 @@ type-infer-sound {e} {t} =
         (mkstate nv uv cs , t′) eq →
             (Sum.universal {C = λ q → [ (λ x → just (apply-subst (x .fst) t′)) , (λ _ → nothing) ]ᵤ q ＝ just t → [] ⊢ e ⦂ t} ⁻¹ $
                 (λ where
-                     (s , us , ws , prf) eq′ →
+                     (s , us , _ , _) eq′ →
                        let eq″ = just-inj eq′ in
                        subst ([] ⊢ e ⦂_) eq″ (ti-correct eq {s = s} λ {t1} {t2} → All→∀∈ us (t1 , t2)))
               , (λ _ → false!))

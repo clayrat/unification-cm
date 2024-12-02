@@ -150,6 +150,16 @@ occurs-wf-ty (p ⟶ q) (wp , wq) noc =
   occurs-wf-ty p wp (contra inl noc) , occurs-wf-ty q wq (contra inr noc)
 occurs-wf-ty  con      w         noc = tt
 
+wf-ty-occurs : ∀ {v c} t → wf-ty (rem v c) t → (¬ occurs v t) × wf-ty c t
+wf-ty-occurs (`` x)    w =
+  first (contra (true→so! ∘ _⁻¹) ∘ so-not) (filter-∈ w)
+wf-ty-occurs (p ⟶ q) (wp , wq) =
+  let (np , wp′) = wf-ty-occurs p wp
+      (nq , wq′) = wf-ty-occurs q wq
+    in
+  ([ np , nq ]ᵤ) , wp′ , wq′
+wf-ty-occurs  con      w = id , tt
+
 -- set of constraints
 
 Constrs : 𝒰
@@ -294,7 +304,7 @@ ext-subst-var-ty {s} {s′} ex con       =
   apply-subst-con {s = s} ∙ apply-subst-con {s = s′} ⁻¹
 
 apply-subst-constrs : Substitution → List Constr → List Constr
-apply-subst-constrs s = map λ (x , y) → apply-subst s x , apply-subst s y
+apply-subst-constrs s = map (bimap (apply-subst s) (apply-subst s))
 
 wf-constr-list-remove : ∀ {c v t}
                       → v ∈ c → ¬ occurs v t → wf-ty c t
@@ -357,15 +367,8 @@ app-lt-constraints : ∀ {l l′ r r′ lc c}
 app-lt-constraints {l} {l′} {r} {r′} {lc} =
   inr (refl , app-lt-measure {l = l} {l′ = l′} {r = r} {r′ = r′} {lc = lc})
 
-varctxt-lt-constraints-varl : ∀ {c v t l}
-                            → v ∈ c
-                            → (rem v c , apply-subst-constrs ((v , t) ∷ []) l) <C (c , (t , `` v) ∷ l)
-varctxt-lt-constraints-varl vi = inl (remove-length-∈ vi)
-
-varctxt-lt-constraints-varr : ∀ {c v t l}
-                            → v ∈ c
-                            → (rem v c , apply-subst-constrs ((v , t) ∷ []) l) <C (c , (`` v , t) ∷ l)
-varctxt-lt-constraints-varr vi = inl (remove-length-∈ vi)
+rem<C : ∀ {c v xs ys} → v ∈ c → (rem v c , xs) <C (c , ys)
+rem<C vi = inl (remove-length-∈ vi)
 
 -- unifier
 
@@ -446,7 +449,9 @@ unify-body (ctx , (tl , tr) ∷ lc) ih wcl | yes e | inr uf = inr (constr-rec uf
 unify-body (ctx , (`` v      , tr)        ∷ lc) ih wcl | no ne with occurs-dec {v} {t = tr}
 unify-body (ctx , (`` v      , tr)        ∷ lc) ih wcl | no ne | yes oc = inr (occ-fail-l oc)
 unify-body (ctx , (`` v      , tr)        ∷ lc) ih wcl | no ne | no noc with ih (rem v ctx , apply-subst-constrs ((v , tr) ∷ []) lc)
-                                                                                (varctxt-lt-constraints-varr {t = tr} {l = lc} (all-head wcl .fst))
+                                                                                (rem<C
+                                                                                   {xs = apply-subst-constrs ((v , tr) ∷ []) lc} {ys = (`` v , tr) ∷ lc}
+                                                                                   (all-head wcl .fst))
                                                                                 (wf-constr-list-remove (all-head wcl .fst) noc (all-head wcl .snd) (all-tail wcl))
 unify-body (ctx , (`` v      , tr)        ∷ lc) ih wcl | no ne | no noc | inl (s , us , ws , sprf) =
   inl ( (v , tr) ∷ s
@@ -481,7 +486,9 @@ unify-body (ctx , (con       , con)       ∷ lc) ih wcl | no ne = absurd (ne re
 unify-body (ctx , (tl        , `` v)      ∷ lc) ih wcl | no ne with occurs-dec {v} {t = tl}
 unify-body (ctx , (tl        , `` v)      ∷ lc) ih wcl | no ne | yes oc = inr (occ-fail-r oc)
 unify-body (ctx , (tl        , `` v)      ∷ lc) ih wcl | no ne | no noc with ih (rem v ctx , apply-subst-constrs ((v , tl) ∷ []) lc)
-                                                                                (varctxt-lt-constraints-varl {t = tl} {l = lc} (all-head wcl .snd))
+                                                                                (rem<C
+                                                                                   {xs = apply-subst-constrs ((v , tl) ∷ []) lc} {ys = (tl , `` v) ∷ lc}
+                                                                                   (all-head wcl .snd))
                                                                                 (wf-constr-list-remove (all-head wcl .snd) noc (all-head wcl .fst) (all-tail wcl))
 unify-body (ctx , (tl        , `` v)      ∷ lc) ih wcl | no ne | no noc | inl (s , us , ws , sprf) =
   inl ( (v , tl) ∷ s

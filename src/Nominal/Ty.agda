@@ -10,10 +10,16 @@ open import Data.Dec as Dec
 open import Data.Nat
 open import Data.Nat.Order.Base
 
+open import Order.Strict
+open import Order.Constructions.Nat
+
 -- ids
 
 Id : 𝒰
 Id = ℕ
+
+Idₛ : StrictPoset 0ℓ 0ℓ
+Idₛ = ℕₛ
 
 -- types
 
@@ -86,6 +92,10 @@ instance
   Ty-is-discrete : is-discrete Ty
   Ty-is-discrete {x} {y} .does = x ==ty y
   Ty-is-discrete .proof = ty-eq-reflects
+
+  H-Level-Ty : ∀ {n} → H-Level (2 + n) Ty
+  H-Level-Ty = hlevel-basic-instance 2 (is-discrete→is-set auto)
+  {-# OVERLAPPING H-Level-Ty #-}
 
 ty-size : Ty → ℕ
 ty-size (p ⟶ q) = suc (ty-size p + ty-size q)

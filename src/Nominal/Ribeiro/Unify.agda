@@ -1,5 +1,5 @@
 {-# OPTIONS --safe #-}
-module Ribeiro.Unify where
+module Nominal.Ribeiro.Unify where
 
 open import Prelude
 open import Meta.Effect
@@ -21,7 +21,7 @@ open import Data.AF
 open import Data.Acc
 open import Order.Constructions.Lex
 
-open import Ribeiro.Ty
+open import Nominal.Ty
 
 -- occurs check
 

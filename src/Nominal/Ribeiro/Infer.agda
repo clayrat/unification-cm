@@ -1,5 +1,5 @@
 {-# OPTIONS --safe #-}
-module Ribeiro.Infer where
+module Nominal.Ribeiro.Infer where
 
 open import Prelude
 open import Meta.Effect
@@ -16,8 +16,8 @@ open import Data.List.Correspondences.Unary.All
 open import Data.List.Correspondences.Unary.Any
 open import Data.List.Operations.Properties
 
-open import Ribeiro.Ty
-open import Ribeiro.Unify
+open import Nominal.Ty
+open import Nominal.Ribeiro.Unify
 
 private variable
   ℓ : Level

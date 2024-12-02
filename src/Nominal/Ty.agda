@@ -1,5 +1,5 @@
 {-# OPTIONS --safe #-}
-module Ribeiro.Ty where
+module Nominal.Ty where
 
 open import Prelude
 

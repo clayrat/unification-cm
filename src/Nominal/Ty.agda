@@ -72,23 +72,23 @@ _==ty_ : Ty → Ty → Bool
 con         ==ty con        = true
 _           ==ty _          = false
 
-ty-eq-reflects : ∀ {x} {y} → Reflects (x ＝ y) (x ==ty y)
-ty-eq-reflects {x = `` x}      {y = `` y}     =
-  Reflects.dmap (ap ``_) (contra ``-inj) Reflects-ℕ-Path
-ty-eq-reflects {x = `` _}      {y = _ ⟶ _}  = ofⁿ ``≠⟶
-ty-eq-reflects {x = `` _}      {y = con}      = ofⁿ ``≠con
-ty-eq-reflects {x = _ ⟶ _}   {y = `` _}     = ofⁿ (``≠⟶ ∘ _⁻¹)
-ty-eq-reflects {x = p₁ ⟶ q₁} {y = p₂ ⟶ q₂} =
-  Reflects.dmap
-    (λ where (e₁ , e₂) → ap² _⟶_ e₁ e₂)
-    (contra ⟶-inj)
-    (Reflects-× ⦃ rp = ty-eq-reflects ⦄ ⦃ rq = ty-eq-reflects ⦄)
-ty-eq-reflects {x = _ ⟶ _}   {y = con}      = ofⁿ ⟶≠con
-ty-eq-reflects {x = con}       {y = `` _}     = ofⁿ (``≠con ∘ _⁻¹)
-ty-eq-reflects {x = con}       {y = _ ⟶ _}  = ofⁿ (⟶≠con ∘ _⁻¹)
-ty-eq-reflects {x = con}       {y = con}      = ofʸ refl
-
 instance
+  ty-eq-reflects : ∀ {x y} → Reflects (x ＝ y) (x ==ty y)
+  ty-eq-reflects {x = `` x}      {y = `` y}     =
+    Reflects.dmap (ap ``_) (contra ``-inj) Reflects-ℕ-Path
+  ty-eq-reflects {x = `` _}      {y = _ ⟶ _}  = ofⁿ ``≠⟶
+  ty-eq-reflects {x = `` _}      {y = con}      = ofⁿ ``≠con
+  ty-eq-reflects {x = _ ⟶ _}   {y = `` _}     = ofⁿ (``≠⟶ ∘ _⁻¹)
+  ty-eq-reflects {x = p₁ ⟶ q₁} {y = p₂ ⟶ q₂} =
+    Reflects.dmap
+      (λ where (e₁ , e₂) → ap² _⟶_ e₁ e₂)
+      (contra ⟶-inj)
+      (Reflects-× ⦃ rp = ty-eq-reflects ⦄ ⦃ rq = ty-eq-reflects ⦄)
+  ty-eq-reflects {x = _ ⟶ _}   {y = con}      = ofⁿ ⟶≠con
+  ty-eq-reflects {x = con}       {y = `` _}     = ofⁿ (``≠con ∘ _⁻¹)
+  ty-eq-reflects {x = con}       {y = _ ⟶ _}  = ofⁿ (⟶≠con ∘ _⁻¹)
+  ty-eq-reflects {x = con}       {y = con}      = ofʸ refl
+
   Ty-is-discrete : is-discrete Ty
   Ty-is-discrete {x} {y} .does = x ==ty y
   Ty-is-discrete .proof = ty-eq-reflects

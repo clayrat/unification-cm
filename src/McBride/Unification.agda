@@ -17,6 +17,8 @@ open import Data.List.Operations.Properties
 open import McBride.Ty
 open import McBride.Substitution
 
+-- proof-relevant occurs-check
+
 check : ∀ {n} → Var (suc n) → Ty (suc n) → Maybe (Ty n)
 check x (`` y)    = ``_ <$> thick x y
 check x (p ⟶ q) = _⟶_ <$> check x p <*> check x q
@@ -108,7 +110,7 @@ substitute-steps f = map (Sum.dmap (substitute f) (substitute f))
 
 check-spec : {n : ℕ} → Var (suc n) → Ty (suc n) → Maybe (Ty n) → 𝒰
 check-spec {n} x t m =
-  Part (Σ[ ps ꞉ List (Step (suc n)) ] (t ＝ ps +: (`` x)))
+  Part (Σ[ ps ꞉ Ctx1 (suc n) ] (t ＝ ps +: (`` x)))
        (λ t′ → t ＝ substitute (rename (thin x)) t′) m
 
 check-correct : ∀ {n} x t → check-spec x t (check {n} x t)
@@ -189,16 +191,17 @@ variable-elim-lemma {x} {t} =
       for-same {x = x} ∙ substitute-id t ⁻¹
     ∙ ap (λ q → substitute q t) (fun-ext λ y → for-thin {x = x} ⁻¹)
     ∙ substitute-comp t
-  , λ f′ u → (f′ ∘ thin x)
-  , fun-ext λ y →
-      Maybe.elim
-        (λ q → thick x y ＝ q → thick-spec x y q → (((f′ ∘ thin x) ◇ (x ≔ t)) y) ＝ f′ y)
-        (λ et p →   ap (λ q → substitute (f′ ∘ thin x) (Maybe.rec t ``_ q)) et
-                  ∙ substitute-comp t ∙ u ⁻¹
-                  ∙ ap f′ (Part-nothing p ⁻¹))
-        (λ j et p →   ap (λ q → substitute (f′ ∘ thin x) (Maybe.rec t ``_ q)) et
-                    ∙ ap f′ (Part-just p ⁻¹))
-        (thick x y) refl (thick-correct x y)
+  , λ f′ u →
+      (f′ ∘ thin x)
+    , fun-ext λ y →
+        Maybe.elim
+          (λ q → thick x y ＝ q → thick-spec x y q → (((f′ ∘ thin x) ◇ (x ≔ t)) y) ＝ f′ y)
+          (λ et p →   ap (λ q → substitute (f′ ∘ thin x) (Maybe.rec t ``_ q)) et
+                    ∙ substitute-comp t ∙ u ⁻¹
+                    ∙ ap f′ (Part-nothing p ⁻¹))
+          (λ j et p →   ap (λ q → substitute (f′ ∘ thin x) (Maybe.rec t ``_ q)) et
+                      ∙ ap f′ (Part-just p ⁻¹))
+          (thick x y) refl (thick-correct x y)
 
 no-cycle-lemma : ∀ {n} {ps : Ctx1 n} {t} → ps +: t ＝ t → ps ＝ []
 no-cycle-lemma {ps = []}                       e = refl
@@ -441,4 +444,3 @@ mgu-list-correct ((x , y) ∷ ls) =
                                       optimist-lemma {a = ⇝id} DCl-unifies-list mx mx′)
                  (amgu-correct x y (k , φ)))
     (mgu-list-correct ls)
-

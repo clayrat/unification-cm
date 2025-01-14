@@ -264,54 +264,6 @@ wf-constr-list-remove {t} vi noc w =
 ↦𝒫◇-id≃ : {p : ↦𝒫} → ↦𝒫≃ (↦𝒫◇ p id↦) p
 ↦𝒫◇-id≃ {p} s = =→≃ (ap p ◇-id-r)
 
--- indexed substitution properties
-
-↦𝒫i : Varctx → 𝒰₁
-↦𝒫i v = (s : Sub) → s .dom ⊆ v → 𝒰
-
-↦𝒫i∅ : ∀ {v} → ↦𝒫i v → 𝒰
-↦𝒫i∅ {v} p = ∀ s (s⊆ : s .dom ⊆ v) → ¬ (p s s⊆)
-
--- erased thinned "order"
--- these things conceptually are categories, not orders
-
-_≤↦_ : Sub → Sub → 𝒰
-f ≤↦ g =
-   Erased (Σ[ h ꞉ Sub ] Σ[ xs ꞉ LFSet Id ] (h ◇ g ＝ thin xs f))
-   -- should be fibre₁ probably, to get propositionality
-
-≤↦-refl : ∀ {f} → f ≤↦ f
-≤↦-refl {f} = erase (id↦ , [] , ◇-id-l ∙ thin-[] ⁻¹)
-
-≤↦-thin : ∀ {f w} → f ≤↦ thin w f
-≤↦-thin {f} {w} = erase (id↦ , w , ◇-id-l)
-
-≤↦-trans : ∀ {f g h : Sub}
-          → f ≤↦ g → g ≤↦ h → f ≤↦ h
-≤↦-trans {f} {g} {h} (erase (fg , wfg , efg)) (erase (gh ,  wgh , ehg)) =
-  erase ( fg ◇ gh
-        , wgh ∪∷ wfg
-        , (  ◇-assoc {h = h}
-           ∙ ap (fg ◇_) ehg
-           ∙ thin-◇-r {xs = wgh} {f = fg} {g = g}
-           ∙ ap (thin wgh) efg
-           ∙ thin-∪∷ {xs = wgh} {ys = wfg} {f = f}
-           )
-        )
-
-≤↦-id : {f : Sub} → f ≤↦ id↦
-≤↦-id {f} = erase (f , [] , ◇-id-r ∙ thin-[] ⁻¹)
-
-≤↦-◇-r : ∀ {f g h : Sub}
-        → f ≤↦ g → (f ◇ h) ≤↦ (g ◇ h)
-≤↦-◇-r {f} {h} (erase (fg , wfg , efg)) =
-  erase ( fg
-        , wfg
-        , (◇-assoc {h = h} ⁻¹
-           ∙ ap (_◇ h) efg
-           ∙ thin-◇-l {xs = wfg} {f = f} {g = h})
-        )
-
 -- thin-stable
 
 ↦thin : ↦𝒫 → 𝒰
@@ -319,6 +271,46 @@ f ≤↦ g =
 
 thin↦ : ↦𝒫 → 𝒰
 thin↦ p = ∀ f w → p (thin w f) → p f
+
+-- thinned "order"
+-- these things conceptually are categories, not orders
+
+_≤↦_ : Sub → Sub → 𝒰
+f ≤↦ g =
+   Σ[ h ꞉ Sub ] Σ[ xs ꞉ LFSet Id ] (h ◇ g ＝ thin xs f)
+   -- should be fibre₁ probably, to get propositionality
+
+≤↦-refl : ∀ {f} → f ≤↦ f
+≤↦-refl {f} = id↦ , [] , ◇-id-l ∙ thin-[] ⁻¹
+
+≤↦-thin : ∀ {f w} → f ≤↦ thin w f
+≤↦-thin {f} {w} = id↦ , w , ◇-id-l
+
+≤↦-trans : ∀ {f g h : Sub}
+          → f ≤↦ g → g ≤↦ h → f ≤↦ h
+≤↦-trans {f} {g} {h} (fg , wfg , efg) (gh ,  wgh , ehg) =
+  ( fg ◇ gh
+  , wgh ∪∷ wfg
+  , (  ◇-assoc {h = h}
+     ∙ ap (fg ◇_) ehg
+     ∙ thin-◇-r {xs = wgh} {f = fg} {g = g}
+     ∙ ap (thin wgh) efg
+     ∙ thin-∪∷ {xs = wgh} {ys = wfg} {f = f}
+     )
+  )
+
+≤↦-id : {f : Sub} → f ≤↦ id↦
+≤↦-id {f} = f , [] , ◇-id-r ∙ thin-[] ⁻¹
+
+≤↦-◇-r : ∀ {f g h : Sub}
+        → f ≤↦ g → (f ◇ h) ≤↦ (g ◇ h)
+≤↦-◇-r {f} {h} (fg , wfg , efg) =
+  ( fg
+  , wfg
+  , (◇-assoc {h = h} ⁻¹
+     ∙ ap (_◇ h) efg
+     ∙ thin-◇-l {xs = wfg} {f = f} {g = h})
+  )
 
 -- maximal substitution satisfying a property
 Max↦ : ↦𝒫 → ↦𝒫
@@ -342,8 +334,7 @@ failure-propagation-lemma2 : ∀ {p q : ↦𝒫} {a f : Sub}
                            → ↦𝒫∅ (↦𝒫◇ q (f ◇ a))
                            → ↦𝒫∅ (↦𝒫◇ (↦𝒫× p q) a)
 failure-propagation-lemma2 {q} {a} (paf , pmax) tq np g pq =
-  Recomputable-⊥ .recompute $ erase
-    let (s , w , e) = pmax g (pq .fst) .erased in
+    let (s , w , e) = pmax g (pq .fst) in
     np s (subst q (◇-assoc {h = a}) $
           subst (λ qq → q (qq ◇ a)) (e ⁻¹) $
           subst q (thin-◇-l {xs = w} {g = a} ⁻¹) $
@@ -355,14 +346,13 @@ optimist-lemma : ∀ {p q : ↦𝒫} {a f g : Sub}
                → Max↦ (↦𝒫◇ q (f ◇ a)) g
                → Max↦ (↦𝒫◇ (↦𝒫× p q) a) (g ◇ f)
 optimist-lemma {q} {a} {f} {g} dc (pfa , pmax) tq (qgfa , qmax) =
-   (  (dc ((g ◇ f) ◇ a) (f ◇ a) (erase (g , [] , ◇-assoc {h = a} ⁻¹ ∙ thin-[] ⁻¹)) pfa)
+   (  (dc ((g ◇ f) ◇ a) (f ◇ a) (g , [] , ◇-assoc {h = a} ⁻¹ ∙ thin-[] ⁻¹) pfa)
     , subst q (◇-assoc {h = a} ⁻¹) qgfa)
   , λ f′ → λ where (pfa , qfa) →
-                      Recomputable-Erased .recompute $ erase
-                        (let (j , w , ea) = pmax f′ pfa .erased in
-                         ≤↦-trans {f = f′} {g = thin w f′} {h = g ◇ f} (≤↦-thin {f = f′} {w = w}) $
-                         subst (_≤↦ (g ◇ f)) ea $
-                         ≤↦-◇-r {f = j} {g = g} {h = f} $
-                         qmax j $
-                         subst q (thin-◇-l {xs = w} {g = a} ⁻¹ ∙ ap (_◇ a) (ea ⁻¹) ∙ ◇-assoc {g = f} {h = a}) $
-                         tq (f′ ◇ a) w qfa)
+                     (let (j , w , ea) = pmax f′ pfa in
+                      ≤↦-trans {f = f′} {g = thin w f′} {h = g ◇ f} (≤↦-thin {f = f′} {w = w}) $
+                      subst (_≤↦ (g ◇ f)) ea $
+                      ≤↦-◇-r {f = j} {g = g} {h = f} $
+                      qmax j $
+                      subst q (thin-◇-l {xs = w} {g = a} ⁻¹ ∙ ap (_◇ a) (ea ⁻¹) ∙ ◇-assoc {g = f} {h = a}) $
+                      tq (f′ ◇ a) w qfa)

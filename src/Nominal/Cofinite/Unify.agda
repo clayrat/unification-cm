@@ -86,28 +86,19 @@ opaque
 
 -- unifier
 
-unifies′ : Ty → Ty → ↦𝒫
-unifies′ x y s = s $↦ x ＝ s $↦ y
-
-unifies : Ty → Ty → ↦𝒫
-unifies x y s = Erased (unifies′ x y s)
-
-{-
 unifies : Ty → Ty → ↦𝒫
 unifies x y s = s $↦ x ＝ s $↦ y
--}
 
 unifies-swap : {s t : Ty} → ↦𝒫≃ (unifies s t) (unifies t s)
-unifies-swap {s} {t} f =
-  prop-extₑ! (map _⁻¹) (map _⁻¹)
+unifies-swap {s} {t} f = prop-extₑ! _⁻¹ _⁻¹
 
 ↦thin-unifies : {s t : Ty} → ↦thin (unifies s t)
 ↦thin-unifies {s} {t} f w u =
-  erase (thin-$↦ {xs = w} {t = s} ∙ u .erased ∙ thin-$↦{xs = w} {t = t} ⁻¹)
+  thin-$↦ {xs = w} {t = s} ∙ u ∙ thin-$↦{xs = w} {t = t} ⁻¹
 
 thin↦-unifies : {s t : Ty} → thin↦ (unifies s t)
 thin↦-unifies {s} {t} f w u =
-  erase (thin-$↦ {xs = w} {t = s} ⁻¹ ∙ u .erased ∙ thin-$↦{xs = w} {t = t})
+  thin-$↦ {xs = w} {t = s} ⁻¹ ∙ u ∙ thin-$↦{xs = w} {t = t}
 
 unifier : List Constr → ↦𝒫
 unifier cs s = All (λ where (x , y) → unifies x y s) cs
@@ -119,13 +110,12 @@ thin↦-unifier : {xs : List (Ty × Ty)} → thin↦ (unifier xs)
 thin↦-unifier f w = all-map λ where {x = x , y} → thin↦-unifies {s = x} {t = y} f w
 
 DCl-unifies : {s t : Ty} → DCl (unifies s t)
-DCl-unifies {s} {t} f g (erase (fg , fgw , fge)) u =
-  Recomputable-Erased .recompute $ erase
+DCl-unifies {s} {t} f g (fg , fgw , fge) u =
     (thin↦-unifies {s = s} {t = t} f fgw $
      subst (unifies s t) fge $
-     erase (  sub-◇ {s1 = fg} {s2 = g} {t = s}
-            ∙ ap (fg $↦_) (u .erased)
-            ∙ sub-◇ {s1 = fg} {s2 = g} {t = t} ⁻¹))
+     (  sub-◇ {s1 = fg} {s2 = g} {t = s}
+      ∙ ap (fg $↦_) u
+      ∙ sub-◇ {s1 = fg} {s2 = g} {t = t} ⁻¹))
 
 DCl-unifier : ∀ {ls : List (Ty × Ty)} → DCl (unifier ls)
 DCl-unifier {ls} f g le =
@@ -136,7 +126,7 @@ unifier-append→ : ∀ {v t su} l
                → unifier l (su ◇ (v ≔ t))
 unifier-append→ []            []       = []
 unifier-append→ {su} ((x , y) ∷ l) (u ∷ us) =
-  erase (sub-◇ {t = x} ∙ u .erased ∙ sub-◇ {t = y} ⁻¹)
+  (sub-◇ {t = x} ∙ u ∙ sub-◇ {t = y} ⁻¹)
    ∷ unifier-append→ l us
 
 unifier-append← : ∀ {v t su} l
@@ -144,7 +134,7 @@ unifier-append← : ∀ {v t su} l
                → unifier (subs (v ≔ t) l) su
 unifier-append← [] [] = []
 unifier-append← ((x , y) ∷ l) (u ∷ us) =
-  erase (sub-◇ {t = x} ⁻¹ ∙ u .erased ∙ sub-◇ {t = y})
+  (sub-◇ {t = x} ⁻¹ ∙ u ∙ sub-◇ {t = y})
    ∷ unifier-append← l us
 
 unifier-append≃ : ∀ {v t su l}
@@ -152,30 +142,31 @@ unifier-append≃ : ∀ {v t su l}
 unifier-append≃ {l} = prop-extₑ! (unifier-append→ l) (unifier-append← l)
 
 unifier-⟶≃ : ∀ {pl ql pr qr lc}
-             → ↦𝒫≃ (unifier (((pl ⟶ ql) , (pr ⟶ qr)) ∷ lc)) (unifier ((pl , pr) ∷ (ql , qr) ∷ lc))
+             → ↦𝒫≃ (unifier (((pl ⟶ ql) , (pr ⟶ qr)) ∷ lc))
+                    (unifier ((pl , pr) ∷ (ql , qr) ∷ lc))
 unifier-⟶≃ {pl} {ql} {pr} {qr} {lc} s =
   prop-extₑ!
     (λ where (a ∷ as) →
-               erase (⟶-inj (a .erased) .fst) ∷ erase (⟶-inj (a .erased) .snd) ∷ as)
-    λ where (al ∷ ar ∷ as) → erase (ap² _⟶_ (al .erased) (ar .erased)) ∷ as
+               (⟶-inj a .fst) ∷ (⟶-inj a .snd) ∷ as)
+    λ where (al ∷ ar ∷ as) → (ap² _⟶_ al ar) ∷ as
 
 max-flex-rigid : ∀ {v t}
                 → ¬ occurs v t
                 → Max↦ (unifies (`` v) t) (v ≔ t)
 max-flex-rigid {v} {t} noc =
-    erase (given-yes (the (v ＝ v) refl)
-             return (λ q → (if ⌊ q ⌋ then t else `` v) ＝ (v ≔ t) $↦ t)
-             then sub-occurs t noc)
+    (given-yes (the (v ＝ v) refl)
+       return (λ q → (if ⌊ q ⌋ then t else `` v) ＝ (v ≔ t) $↦ t)
+       then sub-occurs t noc)
   , λ f′ u′ →
-      erase ( f′ , v ∷ []
-             , sub-ext
-                  (fun-ext λ x →
-                       Dec.elim
-                          {C = λ q → f′ $↦ (if ⌊ q ⌋ then t else  `` x) ＝ (f′ $ x)}
-                          (λ e → u′ .erased ⁻¹ ∙ ap (f′ $_) e)
-                          (λ _ → refl)
-                          (v ≟ x))
-                  refl)
+      ( f′ , v ∷ []
+      , sub-ext
+           (fun-ext λ x →
+                Dec.elim
+                   {C = λ q → f′ $↦ (if ⌊ q ⌋ then t else  `` x) ＝ (f′ $ x)}
+                   (λ e → u′ ⁻¹ ∙ ap (f′ $_) e)
+                   (λ _ → refl)
+                   (v ≟ x))
+           refl)
 
 -- computational substitution
 
@@ -261,9 +252,7 @@ unify-body (ctx , (tl , tr) ∷ lc) ih wcl | yes e with ih (ctx , lc)
 unify-body (ctx , (tl , tr) ∷ lc) ih wcl | yes e | inl (su , wsu , mx) =
   inl ( su , wsu
       -- TODO max lemma ?
-      ,  (erase (ap ((to-sub su) $↦_) e)
-           ∷ (mx .fst)
-           )
+      , ap ((to-sub su) $↦_) e ∷ (mx .fst)
       , λ f′ → mx .snd f′ ∘ all-tail
       )
 unify-body (ctx , (tl , tr) ∷ lc) ih wcl | yes e | inr uf = inr (constr-rec uf)
@@ -320,21 +309,22 @@ unify-body (ctx , (tl        , `` v)      ∷ lc) ih wcl | no ne | no noc with i
 unify-body (ctx , (tl        , `` v)      ∷ lc) ih wcl | no ne | no noc | inl (su , wsu , mx) =
   inl ((v , tl) ∷ su
       , wf-sub-insert {su = su} (occurs-wf-ty tl (all-head wcl .fst) noc) (all-head wcl .snd) wsu
-      , the (Max↦ (unifier ((tl , (`` v)) ∷ lc)) (to-sub su ◇ (v ≔ tl)))
-          (Max↦≃
-             (λ f →
-                    ↦𝒫◇-id≃ {p = ↦𝒫× (unifies tl (`` v)) (unifier lc) } f
-                    ∙ all-×≃ {P = λ where (x , y) → unifies x y f} ⁻¹)
-             (to-sub su ◇ (v ≔ tl)) $
-             optimist-lemma {p = unifies tl (`` v)} {q = unifier lc} {a = id↦}
-                             {f = v ≔ tl} {g = to-sub su}
-                             (DCl-unifies {s = tl})
-                             (Max↦≃ (λ s → unifies-swap {t = tl} s ∙ (↦𝒫◇-id≃ {p = unifies tl (`` v)} s) ⁻¹)
-                                    (v ≔ tl) $
-                              max-flex-rigid noc)
-                             (↦thin-unifier {xs = lc})
-                             (subst (λ q → Max↦ (↦𝒫◇ (unifier lc) q) (to-sub su))
-                                    (◇-id-r {s = v ≔ tl} ⁻¹) $
-                              Max↦≃ (λ s → unifier-append≃) (to-sub su) $ mx))
+      , (Max↦≃
+           (λ f →   ↦𝒫◇-id≃ {p = ↦𝒫× (unifies tl (`` v)) (unifier lc) } f
+                  ∙ all-×≃ {P = λ where (x , y) → unifies x y f} ⁻¹)
+           (to-sub su ◇ (v ≔ tl)) $
+           optimist-lemma {p = unifies tl (`` v)} {q = unifier lc} {a = id↦}
+                           {f = v ≔ tl} {g = to-sub su}
+                           (DCl-unifies {s = tl})
+                           (Max↦≃ (λ s → unifies-swap {t = tl} s ∙ (↦𝒫◇-id≃ {p = unifies tl (`` v)} s) ⁻¹)
+                                  (v ≔ tl) $
+                            max-flex-rigid noc)
+                           (↦thin-unifier {xs = lc})
+                           (subst (λ q → Max↦ (↦𝒫◇ (unifier lc) q) (to-sub su))
+                                  (◇-id-r {s = v ≔ tl} ⁻¹) $
+                            Max↦≃ (λ s → unifier-append≃) (to-sub su) $ mx))
       )
 unify-body (ctx , (tl        , `` v)      ∷ lc) ih wcl | no ne | no noc | inr uf = inr (subs-rec {s = v ≔ tl} uf)
+
+unify : (l : Constrs) → unify-type l
+unify = to-induction <C-wf unify-type unify-body

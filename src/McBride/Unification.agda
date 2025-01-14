@@ -219,7 +219,7 @@ no-cycle-lemma {ps = inl r ∷ ps} {t = con}     e = ⊥.absurd (⟶≠con e)
 no-cycle-lemma {ps = inr l ∷ ps} {t = con}     e = ⊥.absurd (⟶≠con e)
 
 no-unify-+var : ∀ {m} {x : Var m} {p ps}
-             → ⇝P∅ (unifies (`` x) ((p ∷ ps) +: (`` x)))
+              → ⇝P∅ (unifies (`` x) ((p ∷ ps) +: (`` x)))
 no-unify-+var {p} {ps} f u =
   false! $ no-cycle-lemma ((u ∙ +:-subst {f = f} {ps = p ∷ ps}) ⁻¹)
 

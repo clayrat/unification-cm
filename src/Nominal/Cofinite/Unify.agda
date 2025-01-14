@@ -14,7 +14,7 @@ open import Data.List as List
 open import Data.List.Correspondences.Unary.All
 open import Data.List.Operations.Properties
 open import Data.List.Operations.Discrete
-open import Data.Sum
+open import Data.Sum as ⊎
 open import Data.Plus
 open import Data.AF
 open import Data.Acc
@@ -94,11 +94,11 @@ unifies-swap {s} {t} f = prop-extₑ! _⁻¹ _⁻¹
 
 ↦thin-unifies : {s t : Ty} → ↦thin (unifies s t)
 ↦thin-unifies {s} {t} f w u =
-  thin-$↦ {xs = w} {t = s} ∙ u ∙ thin-$↦{xs = w} {t = t} ⁻¹
+  thin-$↦ {xs = w} {t = s} ∙ u ∙ thin-$↦ {xs = w} {t = t} ⁻¹
 
 thin↦-unifies : {s t : Ty} → thin↦ (unifies s t)
 thin↦-unifies {s} {t} f w u =
-  thin-$↦ {xs = w} {t = s} ⁻¹ ∙ u ∙ thin-$↦{xs = w} {t = t}
+  thin-$↦ {xs = w} {t = s} ⁻¹ ∙ u ∙ thin-$↦ {xs = w} {t = t}
 
 unifier : List Constr → ↦𝒫
 unifier cs s = All (λ where (x , y) → unifies x y s) cs
@@ -149,6 +149,27 @@ unifier-⟶≃ {pl} {ql} {pr} {qr} {lc} s =
     (λ where (a ∷ as) →
                (⟶-inj a .fst) ∷ (⟶-inj a .snd) ∷ as)
     λ where (al ∷ ar ∷ as) → (ap² _⟶_ al ar) ∷ as
+
+unify-ty : ∀ {v t′ s} t
+         → unifies (`` v) t′ s
+         → unifies t ((v ≔ t′) $↦ t) s
+unify-ty {v} {t′} {s} (`` x)    ea =
+  Dec.elim
+    {C = λ q → (s $ x) ＝ (s $↦ (if ⌊ q ⌋ then t′ else (`` x)))}
+    (λ evx → ap (s $_) (evx ⁻¹) ∙ ea)
+    (λ _ → refl)
+    (v ≟ x)
+unify-ty         {s} (p ⟶ q) ea =
+  ap² _⟶_ (unify-ty {s = s} p ea) (unify-ty {s = s} q ea)
+unify-ty              con      ea = refl
+
+unifier-subs : ∀ {v t s} l
+              → unifies (`` v) t s
+              → unifier l s
+              → unifier (subs (v ≔ t) l) s
+unifier-subs     []              ea       u  = []
+unifier-subs {s} ((tl , tr) ∷ l) ea (et ∷ u) =
+  unify-ty {s = s} tl ea ⁻¹ ∙ et ∙ unify-ty {s = s} tr ea ∷ unifier-subs {s = s} l ea u
 
 max-flex-rigid : ∀ {v t}
                 → ¬ occurs v t
@@ -218,19 +239,97 @@ wf-sub-insert {ctx} {su} {v} {t} wr vin wf {x} xin =
 
 data UnifyFailure : List Constr → 𝒰 where
   occ-fail-l : ∀ {v t lc}
-             → occurs v t → UnifyFailure ((`` v , t) ∷ lc)
+             → t ≠ `` v → occurs v t
+             → UnifyFailure ((`` v , t) ∷ lc)
   occ-fail-r : ∀ {v t lc}
-             → occurs v t → UnifyFailure ((t , `` v) ∷ lc)
+             → t ≠ `` v → occurs v t
+             → UnifyFailure ((t , `` v) ∷ lc)
   con-app    : ∀ {l r lc}
              → UnifyFailure ((con , l ⟶ r) ∷ lc)
   app-con    : ∀ {l r lc}
              → UnifyFailure ((l ⟶ r , con) ∷ lc)
-  app-right  : ∀ {l l' r r' lc}
+  arr-arr    : ∀ {l l' r r' lc}
              → UnifyFailure ((l , l') ∷ (r , r') ∷ lc) → UnifyFailure ((l ⟶ r , l' ⟶ r') ∷ lc)
   constr-rec : ∀ {t t' l}
              → UnifyFailure l → UnifyFailure ((t , t') ∷ l)
-  subs-rec   : ∀ {t t' s l}
-             → UnifyFailure (subs s l) → UnifyFailure ((t , t') ∷ l)
+  subs-rec-l : ∀ {v t l}
+             → UnifyFailure (subs (v ≔ t) l) → UnifyFailure ((`` v , t) ∷ l)
+  subs-rec-r : ∀ {v t l}
+             → UnifyFailure (subs (v ≔ t) l) → UnifyFailure ((t , `` v) ∷ l)
+
+Step : 𝒰
+Step = Ty ⊎ Ty
+
+-- one-hole context
+Ctx1 : 𝒰
+Ctx1 = List Step
+
+-- plugging the hole
+_+:_ : Ctx1 → Ty → Ty
+[]           +: t = t
+(inl r ∷ ps) +: t = (ps +: t) ⟶ r
+(inr l ∷ ps) +: t = l ⟶ (ps +: t)
+
+occ→ctx : ∀ {v t} → occurs v t → Σ[ c ꞉ Ctx1 ] (t ＝ c +: (`` v))
+occ→ctx {t = `` x}   oc        = [] , (ap ``_ (oc ⁻¹))
+occ→ctx {t = p ⟶ q} (inl oc) =
+  let (s , e) = occ→ctx {t = p} oc in
+  (inl q ∷ s) , ap (_⟶ q) e
+occ→ctx {t = p ⟶ q} (inr oc) =
+  let (s , e) = occ→ctx {t = q} oc in
+  (inr p ∷ s) , ap (p ⟶_) e
+
++:-++ : ∀ {ps qs : Ctx1} {t} → (ps ++ qs) +: t ＝ ps +: (qs +: t)
++:-++ {ps = []}         = refl
++:-++ {ps = inl r ∷ ps} = ap (_⟶ r) (+:-++ {ps = ps})
++:-++ {ps = inr l ∷ ps} = ap (l ⟶_) (+:-++ {ps = ps})
+
+_$↦C_ : Sub → Ctx1 → Ctx1
+_$↦C_ f = map (⊎.dmap (f $↦_) (f $↦_))
+
++:-subst : ∀ {f : Sub} {ps : Ctx1} {t}
+         → (f $↦ (ps +: t)) ＝ (f $↦C ps) +: (f $↦ t)
++:-subst     {ps = []}         = refl
++:-subst {f} {ps = inl r ∷ ps} = ap (_⟶ (f $↦ r)) (+:-subst {ps = ps})
++:-subst {f} {ps = inr l ∷ ps} = ap ((f $↦ l) ⟶_) (+:-subst {ps = ps})
+
+no-cycle-lemma : ∀ {ps : Ctx1} {t} → ps +: t ＝ t → ps ＝ []
+no-cycle-lemma {ps = []}                       e = refl
+no-cycle-lemma {ps = inl r ∷ ps} {t = `` x}    e = ⊥.absurd (``≠⟶ (e ⁻¹))
+no-cycle-lemma {ps = inr l ∷ ps} {t = `` x}    e = ⊥.absurd (``≠⟶ (e ⁻¹))
+no-cycle-lemma {ps = inl r ∷ ps} {t = p ⟶ q} e =
+  let (ep , _) = ⟶-inj e in
+  false! (no-cycle-lemma {ps = ps ∷r inl q} {t = p}
+          (ap (_+: p) (snoc-append ps) ∙ +:-++ {ps = ps}  ∙ ep))
+no-cycle-lemma {ps = inr l ∷ ps} {t = p ⟶ q} e =
+  let (_ , eq) = ⟶-inj e in
+  false! (no-cycle-lemma {ps = ps ∷r inr p} {t = q}
+          (ap (_+: q) (snoc-append ps) ∙ +:-++ {ps = ps}  ∙ eq))
+no-cycle-lemma {ps = inl r ∷ ps} {t = con}     e = ⊥.absurd (⟶≠con e)
+no-cycle-lemma {ps = inr l ∷ ps} {t = con}     e = ⊥.absurd (⟶≠con e)
+
+no-unify-+var : ∀ {x : Id} {p ps}
+              → ↦𝒫∅ (unifies (`` x) ((p ∷ ps) +: (`` x)))
+no-unify-+var {p} {ps} f u =
+  false! $ no-cycle-lemma ((u ∙ +:-subst {f = f} {ps = p ∷ ps}) ⁻¹)
+
+failure→no-unifier : ∀ {lc} → UnifyFailure lc → ↦𝒫∅ (unifier lc)
+failure→no-unifier (occ-fail-l {t} ne oc) s u with occ→ctx {t = t} oc
+... | []    , e = ne e
+... | p ∷ c , e = no-unify-+var {p = p} s (all-head u ∙ ap (s $↦_) e)
+failure→no-unifier (occ-fail-r {t} ne oc) s u with occ→ctx {t = t} oc
+... | []    , e = ne e
+... | p ∷ c , e = no-unify-+var {p = p} s (all-head u ⁻¹ ∙ ap (s $↦_) e)
+failure→no-unifier  con-app        s u = ⟶≠con (all-head u ⁻¹)
+failure→no-unifier  app-con        s u = ⟶≠con (all-head u)
+failure→no-unifier (arr-arr uf)    s u =
+  failure→no-unifier uf s (unifier-⟶≃ s $ u)
+failure→no-unifier (constr-rec uf) s u =
+  failure→no-unifier uf s (all-tail u)
+failure→no-unifier (subs-rec-l {l} uf) s u =
+  failure→no-unifier uf s (unifier-subs l (all-head u) (all-tail u))
+failure→no-unifier (subs-rec-r {l} uf) s u =
+  failure→no-unifier uf s (unifier-subs l (all-head u ⁻¹) (all-tail u))
 
 -- main algorithm
 
@@ -257,7 +356,7 @@ unify-body (ctx , (tl , tr) ∷ lc) ih wcl | yes e | inl (su , wsu , mx) =
       )
 unify-body (ctx , (tl , tr) ∷ lc) ih wcl | yes e | inr uf = inr (constr-rec uf)
 unify-body (ctx , (`` v      , tr)        ∷ lc) ih wcl | no ne with occurs-dec {v} {t = tr}
-unify-body (ctx , (`` v      , tr)        ∷ lc) ih wcl | no ne | yes oc = inr (occ-fail-l oc)
+unify-body (ctx , (`` v      , tr)        ∷ lc) ih wcl | no ne | yes oc = inr (occ-fail-l (ne ∘ _⁻¹) oc)
 unify-body (ctx , (`` v      , tr)        ∷ lc) ih wcl | no ne | no noc with ih (rem v ctx , subs (v ≔ tr) lc)
                                                                                 (rem<C
                                                                                    {xs = subs (v ≔ tr) lc} {ys = (`` v , tr) ∷ lc}
@@ -281,7 +380,7 @@ unify-body (ctx , (`` v      , tr)        ∷ lc) ih wcl | no ne | no noc | inl 
                Max↦≃ (λ s → unifier-append≃) (to-sub su) $ mx)
                )
        )
-unify-body (ctx , (`` v      , tr)        ∷ lc) ih wcl | no ne | no noc | inr uf = inr (subs-rec {s = v ≔ tr} uf)
+unify-body (ctx , (`` v      , tr)        ∷ lc) ih wcl | no ne | no noc | inr uf = inr (subs-rec-l uf)
 unify-body (ctx , (pl ⟶ ql , pr ⟶ qr)  ∷ lc) ih wcl | no ne with ih (ctx , (pl , pr) ∷ (ql , qr) ∷ lc)
                                                                        (app-lt-constraints {l = pl} {l′ = pr} {r = ql} {r′ = qr} {lc = lc})
                                                                        (  (all-head wcl .fst .fst , all-head wcl .snd .fst)
@@ -295,12 +394,12 @@ unify-body (ctx , (pl ⟶ ql , pr ⟶ qr)  ∷ lc) ih wcl | no ne | inl (su , ws
            (to-sub su) $
            mx)
       )
-unify-body (ctx , (pl ⟶ ql , pr ⟶ qr)  ∷ lc) ih wcl | no ne | inr uf = inr (app-right uf)
+unify-body (ctx , (pl ⟶ ql , pr ⟶ qr)  ∷ lc) ih wcl | no ne | inr uf = inr (arr-arr uf)
 unify-body (ctx , (pl ⟶ ql , con)       ∷ lc) ih wcl | no ne = inr app-con
 unify-body (ctx , (con       , pr ⟶ qr) ∷ lc) ih wcl | no ne = inr con-app
 unify-body (ctx , (con       , con)       ∷ lc) ih wcl | no ne = absurd (ne refl)
 unify-body (ctx , (tl        , `` v)      ∷ lc) ih wcl | no ne with occurs-dec {v} {t = tl}
-unify-body (ctx , (tl        , `` v)      ∷ lc) ih wcl | no ne | yes oc = inr (occ-fail-r oc)
+unify-body (ctx , (tl        , `` v)      ∷ lc) ih wcl | no ne | yes oc = inr (occ-fail-r ne oc)
 unify-body (ctx , (tl        , `` v)      ∷ lc) ih wcl | no ne | no noc with ih (rem v ctx , subs (v ≔ tl) lc)
                                                                                 (rem<C
                                                                                    {xs = subs (v ≔ tl) lc} {ys = (tl , `` v) ∷ lc}
@@ -324,7 +423,7 @@ unify-body (ctx , (tl        , `` v)      ∷ lc) ih wcl | no ne | no noc | inl 
                                   (◇-id-r {s = v ≔ tl} ⁻¹) $
                             Max↦≃ (λ s → unifier-append≃) (to-sub su) $ mx))
       )
-unify-body (ctx , (tl        , `` v)      ∷ lc) ih wcl | no ne | no noc | inr uf = inr (subs-rec {s = v ≔ tl} uf)
+unify-body (ctx , (tl        , `` v)      ∷ lc) ih wcl | no ne | no noc | inr uf = inr (subs-rec-r uf)
 
 unify : (l : Constrs) → unify-type l
 unify = to-induction <C-wf unify-type unify-body

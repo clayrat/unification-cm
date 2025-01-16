@@ -28,6 +28,202 @@ open import Nominal.Ty
 open import Nominal.Cofinite.Base
 open import Nominal.Cofinite.Sub
 
+-- unifier
+
+unifies : Ty → Ty → ↦𝒫
+unifies x y s = s $↦ x ＝ s $↦ y
+
+unifies-swap : {s t : Ty} → ↦𝒫≃ (unifies s t) (unifies t s)
+unifies-swap {s} {t} f = prop-extₑ! _⁻¹ _⁻¹
+
+↦thin-unifies : {s t : Ty} → ↦thin (unifies s t)
+↦thin-unifies {s} {t} f w u =
+  thin-$↦ {xs = w} {t = s} ∙ u ∙ thin-$↦ {xs = w} {t = t} ⁻¹
+
+thin↦-unifies : {s t : Ty} → thin↦ (unifies s t)
+thin↦-unifies {s} {t} f w u =
+  thin-$↦ {xs = w} {t = s} ⁻¹ ∙ u ∙ thin-$↦ {xs = w} {t = t}
+
+unifier : List Constr → ↦𝒫
+unifier cs s = All (λ where (x , y) → unifies x y s) cs
+
+↦thin-unifier : ∀ {xs} → ↦thin (unifier xs)
+↦thin-unifier f w = all-map λ where {x = x , y} → ↦thin-unifies {s = x} {t = y} f w
+
+thin↦-unifier : ∀ {xs} → thin↦ (unifier xs)
+thin↦-unifier f w = all-map λ where {x = x , y} → thin↦-unifies {s = x} {t = y} f w
+
+DCl-unifies : ∀ {s t} → DCl (unifies s t)
+DCl-unifies {s} {t} f g (fg , fgw , fge) u =
+    (thin↦-unifies {s = s} {t = t} f fgw $
+     subst (unifies s t) fge $
+     (  sub-◇ {s1 = fg} {s2 = g} {t = s}
+      ∙ ap (fg $↦_) u
+      ∙ sub-◇ {s1 = fg} {s2 = g} {t = t} ⁻¹))
+
+DCl-unifier : ∀ {ls} → DCl (unifier ls)
+DCl-unifier {ls} f g le =
+  all-map (λ where {x = x , y} → DCl-unifies {s = x} {t = y} f g le)
+
+unifier-eq : ∀ {p q l} → p ＝ q → ↦𝒫≃ (unifier l) (unifier ((p , q) ∷ l))
+unifier-eq e s = prop-extₑ! (λ u → (ap (s $↦_) e) ∷ u) all-tail
+
+unifier-append→ : ∀ {v t su} l
+               → unifier ((v ≔ t) $↦L l) su
+               → unifier l (su ◇ (v ≔ t))
+unifier-append→ []            []       = []
+unifier-append→ ((x , y) ∷ l) (u ∷ us) =
+  (sub-◇ {t = x} ∙ u ∙ sub-◇ {t = y} ⁻¹)
+   ∷ unifier-append→ l us
+
+unifier-append← : ∀ {v t su} l
+               → unifier l (su ◇ (v ≔ t))
+               → unifier ((v ≔ t) $↦L l) su
+unifier-append← []            []       = []
+unifier-append← ((x , y) ∷ l) (u ∷ us) =
+  (sub-◇ {t = x} ⁻¹ ∙ u ∙ sub-◇ {t = y})
+   ∷ unifier-append← l us
+
+unifier-append≃ : ∀ {v t su l}
+                → unifier ((v ≔ t) $↦L l) su ≃ unifier l (su ◇ (v ≔ t))
+unifier-append≃ {l} = prop-extₑ! (unifier-append→ l) (unifier-append← l)
+
+unifier-⟶≃ : ∀ {pl ql pr qr lc}
+             → ↦𝒫≃ (unifier (((pl ⟶ ql) , (pr ⟶ qr)) ∷ lc))
+                    (unifier ((pl , pr) ∷ (ql , qr) ∷ lc))
+unifier-⟶≃ {pl} {ql} {pr} {qr} {lc} s =
+  prop-extₑ!
+    (λ where (a ∷ as) →
+               (⟶-inj a .fst) ∷ (⟶-inj a .snd) ∷ as)
+    λ where (al ∷ ar ∷ as) → (ap² _⟶_ al ar) ∷ as
+
+unify-ty : ∀ {v t′ s} t
+         → unifies (`` v) t′ s
+         → unifies t ((v ≔ t′) $↦ t) s
+unify-ty {v} {t′} {s} (`` x)    ea =
+  Dec.elim
+    {C = λ q → (s $ x) ＝ (s $↦ (if ⌊ q ⌋ then t′ else (`` x)))}
+    (λ evx → ap (s $_) (evx ⁻¹) ∙ ea)
+    (λ _ → refl)
+    (v ≟ x)
+unify-ty         {s} (p ⟶ q) ea =
+  ap² _⟶_ (unify-ty {s = s} p ea) (unify-ty {s = s} q ea)
+unify-ty              con      ea = refl
+
+unifier-subs : ∀ {v t s} l
+              → unifies (`` v) t s
+              → unifier l s
+              → unifier ((v ≔ t) $↦L l) s
+unifier-subs     []              ea       u  = []
+unifier-subs {s} ((tl , tr) ∷ l) ea (et ∷ u) =
+  unify-ty {s = s} tl ea ⁻¹ ∙ et ∙ unify-ty {s = s} tr ea ∷ unifier-subs {s = s} l ea u
+
+max-flex-rigid : ∀ {v t}
+                → ¬ occurs v t
+                → Max↦ (unifies (`` v) t) (v ≔ t)
+max-flex-rigid {v} {t} noc =
+    (given-yes (the (v ＝ v) refl)
+       return (λ q → (if ⌊ q ⌋ then t else `` v) ＝ (v ≔ t) $↦ t)
+       then sub-occurs t noc)
+  , λ f′ u′ →
+      ( f′ , v ∷ []
+      , sub-ext
+           (fun-ext λ x →
+                Dec.elim
+                   {C = λ q → f′ $↦ (if ⌊ q ⌋ then t else  `` x) ＝ (f′ $ x)}
+                   (λ e → u′ ⁻¹ ∙ ap (f′ $_) e)
+                   (λ _ → refl)
+                   (v ≟ x))
+           refl)
+
+no-unify-+var : ∀ {x : Id} {p ps}
+              → ↦𝒫∅ (unifies (`` x) ((p ∷ ps) +: (`` x)))
+no-unify-+var {p} {ps} f u =
+  false! $ no-cycle-lemma ((u ∙ +:-subst {f = f} {ps = p ∷ ps}) ⁻¹)
+
+-- computational substitution
+
+SubC : 𝒰
+SubC = List (Id × Ty)
+
+to-sub : SubC → Sub
+to-sub = List.rec id↦ (λ where (x , t) → _◇ (x ≔ t))
+
+wf-sub-insert : ∀ {ctx su v t}
+              → wf-ty (rem v ctx) t
+              → v ∈ ctx
+              → Wf-subst (rem v ctx) (to-sub su)
+              → Wf-subst ctx (to-sub ((v , t) ∷ su))
+wf-sub-insert {ctx} {su} {v} {t} wr vin wf {x} xin =
+  caseᵈ v ＝ x of
+    λ where
+       (yes v=x) →
+           subst (_∈ ctx) v=x vin
+         , (given-yes v=x
+              return (λ q → wf-ty (minus ctx (v ∷ to-sub su .dom))
+                                  (to-sub su $↦ (if ⌊ q ⌋ then t else `` x)))
+              then subst (λ q → wf-ty q (to-sub su $↦ t))
+                         (minus-rem-l ∙ minus-∷-r ⁻¹)
+                         (substs-remove wf wr))
+       (no v≠x) →
+            Recomputable-×
+             Recomputable-∈ₛ (wf-ty-recomp {t = to-sub ((v , t) ∷ su) $ x})
+             .recompute $
+               erase
+                (elim! {P = λ _ → (x ∈ₛ ctx)
+                                    ×ₜ wf-ty (minus ctx (v ∷ to-sub su .dom))
+                                             (to-sub ((v , t) ∷ su) $ x)}
+                   [ (λ e → absurd (v≠x (e ⁻¹)))
+                   , (λ x∈′ → let (x∈r , wtx) = wf (⇉∈ₛ $ erase x∈′) in
+                                 rem-⊆ x∈r
+                               , (given-no v≠x
+                             return (λ q → wf-ty (minus ctx (v ∷ to-sub su .dom))
+                                                 (to-sub su $↦ (if ⌊ q ⌋ then t else `` x)))
+                             then subst (λ q → wf-ty q (to-sub su $ x))
+                                        (minus-rem-l ∙ minus-∷-r ⁻¹)
+                                        wtx))
+                   ]ᵤ (∈ₛ⇉ xin .erased))
+
+-- failure
+
+data UnifyFailure : List Constr → 𝒰 where
+  occ-fail-l : ∀ {v t lc}
+             → t ≠ `` v → occurs v t
+             → UnifyFailure ((`` v , t) ∷ lc)
+  occ-fail-r : ∀ {v t lc}
+             → t ≠ `` v → occurs v t
+             → UnifyFailure ((t , `` v) ∷ lc)
+  con-app    : ∀ {l r lc}
+             → UnifyFailure ((con , l ⟶ r) ∷ lc)
+  app-con    : ∀ {l r lc}
+             → UnifyFailure ((l ⟶ r , con) ∷ lc)
+  arr-arr    : ∀ {l l' r r' lc}
+             → UnifyFailure ((l , l') ∷ (r , r') ∷ lc) → UnifyFailure ((l ⟶ r , l' ⟶ r') ∷ lc)
+  constr-rec : ∀ {t t' l}
+             → UnifyFailure l → UnifyFailure ((t , t') ∷ l)
+  subs-rec-l : ∀ {v t l}
+             → UnifyFailure ((v ≔ t) $↦L l) → UnifyFailure ((`` v , t) ∷ l)
+  subs-rec-r : ∀ {v t l}
+             → UnifyFailure ((v ≔ t) $↦L l) → UnifyFailure ((t , `` v) ∷ l)
+
+failure→no-unifier : ∀ {lc} → UnifyFailure lc → ↦𝒫∅ (unifier lc)
+failure→no-unifier (occ-fail-l {t} ne oc) s u with occ→ctx {t = t} oc
+... | []    , e = ne e
+... | p ∷ c , e = no-unify-+var {p = p} s (all-head u ∙ ap (s $↦_) e)
+failure→no-unifier (occ-fail-r {t} ne oc) s u with occ→ctx {t = t} oc
+... | []    , e = ne e
+... | p ∷ c , e = no-unify-+var {p = p} s (all-head u ⁻¹ ∙ ap (s $↦_) e)
+failure→no-unifier  con-app        s u = ⟶≠con (all-head u ⁻¹)
+failure→no-unifier  app-con        s u = ⟶≠con (all-head u)
+failure→no-unifier (arr-arr uf)    s u =
+  failure→no-unifier uf s (unifier-⟶≃ s $ u)
+failure→no-unifier (constr-rec uf) s u =
+  failure→no-unifier uf s (all-tail u)
+failure→no-unifier (subs-rec-l {l} uf) s u =
+  failure→no-unifier uf s (unifier-subs l (all-head u) (all-tail u))
+failure→no-unifier (subs-rec-r {l} uf) s u =
+  failure→no-unifier uf s (unifier-subs l (all-head u ⁻¹) (all-tail u))
+
 -- constraint order
 
 _<C_ : Constrs → Constrs → 𝒰
@@ -84,253 +280,6 @@ opaque
   rem<C {v} vi =
     inl (filter-size-neg (not-so $ ¬so≃is-false ⁻¹ $ ap not (so≃is-true $ true→so! (the (v ＝ v) refl))) vi)
 
--- unifier
-
-unifies : Ty → Ty → ↦𝒫
-unifies x y s = s $↦ x ＝ s $↦ y
-
-unifies-swap : {s t : Ty} → ↦𝒫≃ (unifies s t) (unifies t s)
-unifies-swap {s} {t} f = prop-extₑ! _⁻¹ _⁻¹
-
-↦thin-unifies : {s t : Ty} → ↦thin (unifies s t)
-↦thin-unifies {s} {t} f w u =
-  thin-$↦ {xs = w} {t = s} ∙ u ∙ thin-$↦ {xs = w} {t = t} ⁻¹
-
-thin↦-unifies : {s t : Ty} → thin↦ (unifies s t)
-thin↦-unifies {s} {t} f w u =
-  thin-$↦ {xs = w} {t = s} ⁻¹ ∙ u ∙ thin-$↦ {xs = w} {t = t}
-
-unifier : List Constr → ↦𝒫
-unifier cs s = All (λ where (x , y) → unifies x y s) cs
-
-↦thin-unifier : {xs : List (Ty × Ty)} → ↦thin (unifier xs)
-↦thin-unifier f w = all-map λ where {x = x , y} → ↦thin-unifies {s = x} {t = y} f w
-
-thin↦-unifier : {xs : List (Ty × Ty)} → thin↦ (unifier xs)
-thin↦-unifier f w = all-map λ where {x = x , y} → thin↦-unifies {s = x} {t = y} f w
-
-DCl-unifies : {s t : Ty} → DCl (unifies s t)
-DCl-unifies {s} {t} f g (fg , fgw , fge) u =
-    (thin↦-unifies {s = s} {t = t} f fgw $
-     subst (unifies s t) fge $
-     (  sub-◇ {s1 = fg} {s2 = g} {t = s}
-      ∙ ap (fg $↦_) u
-      ∙ sub-◇ {s1 = fg} {s2 = g} {t = t} ⁻¹))
-
-DCl-unifier : ∀ {ls : List (Ty × Ty)} → DCl (unifier ls)
-DCl-unifier {ls} f g le =
-  all-map (λ where {x = x , y} → DCl-unifies {s = x} {t = y} f g le)
-
-unifier-append→ : ∀ {v t su} l
-               → unifier (subs (v ≔ t) l) su
-               → unifier l (su ◇ (v ≔ t))
-unifier-append→ []            []       = []
-unifier-append→ {su} ((x , y) ∷ l) (u ∷ us) =
-  (sub-◇ {t = x} ∙ u ∙ sub-◇ {t = y} ⁻¹)
-   ∷ unifier-append→ l us
-
-unifier-append← : ∀ {v t su} l
-               → unifier l (su ◇ (v ≔ t))
-               → unifier (subs (v ≔ t) l) su
-unifier-append← [] [] = []
-unifier-append← ((x , y) ∷ l) (u ∷ us) =
-  (sub-◇ {t = x} ⁻¹ ∙ u ∙ sub-◇ {t = y})
-   ∷ unifier-append← l us
-
-unifier-append≃ : ∀ {v t su l}
-                → unifier (subs (v ≔ t) l) su ≃ unifier l (su ◇ (v ≔ t))
-unifier-append≃ {l} = prop-extₑ! (unifier-append→ l) (unifier-append← l)
-
-unifier-⟶≃ : ∀ {pl ql pr qr lc}
-             → ↦𝒫≃ (unifier (((pl ⟶ ql) , (pr ⟶ qr)) ∷ lc))
-                    (unifier ((pl , pr) ∷ (ql , qr) ∷ lc))
-unifier-⟶≃ {pl} {ql} {pr} {qr} {lc} s =
-  prop-extₑ!
-    (λ where (a ∷ as) →
-               (⟶-inj a .fst) ∷ (⟶-inj a .snd) ∷ as)
-    λ where (al ∷ ar ∷ as) → (ap² _⟶_ al ar) ∷ as
-
-unify-ty : ∀ {v t′ s} t
-         → unifies (`` v) t′ s
-         → unifies t ((v ≔ t′) $↦ t) s
-unify-ty {v} {t′} {s} (`` x)    ea =
-  Dec.elim
-    {C = λ q → (s $ x) ＝ (s $↦ (if ⌊ q ⌋ then t′ else (`` x)))}
-    (λ evx → ap (s $_) (evx ⁻¹) ∙ ea)
-    (λ _ → refl)
-    (v ≟ x)
-unify-ty         {s} (p ⟶ q) ea =
-  ap² _⟶_ (unify-ty {s = s} p ea) (unify-ty {s = s} q ea)
-unify-ty              con      ea = refl
-
-unifier-subs : ∀ {v t s} l
-              → unifies (`` v) t s
-              → unifier l s
-              → unifier (subs (v ≔ t) l) s
-unifier-subs     []              ea       u  = []
-unifier-subs {s} ((tl , tr) ∷ l) ea (et ∷ u) =
-  unify-ty {s = s} tl ea ⁻¹ ∙ et ∙ unify-ty {s = s} tr ea ∷ unifier-subs {s = s} l ea u
-
-max-flex-rigid : ∀ {v t}
-                → ¬ occurs v t
-                → Max↦ (unifies (`` v) t) (v ≔ t)
-max-flex-rigid {v} {t} noc =
-    (given-yes (the (v ＝ v) refl)
-       return (λ q → (if ⌊ q ⌋ then t else `` v) ＝ (v ≔ t) $↦ t)
-       then sub-occurs t noc)
-  , λ f′ u′ →
-      ( f′ , v ∷ []
-      , sub-ext
-           (fun-ext λ x →
-                Dec.elim
-                   {C = λ q → f′ $↦ (if ⌊ q ⌋ then t else  `` x) ＝ (f′ $ x)}
-                   (λ e → u′ ⁻¹ ∙ ap (f′ $_) e)
-                   (λ _ → refl)
-                   (v ≟ x))
-           refl)
-
--- computational substitution
-
-SubC : 𝒰
-SubC = List (Id × Ty)
-
-to-sub : List (Id × Ty) → Sub
-to-sub = List.rec id↦ (λ where (x , t) → _◇ (x ≔ t))
-
-wf-sub-insert : ∀ {ctx su v t}
-              → wf-ty (rem v ctx) t
-              → v ∈ ctx
-              → Wf-subst (rem v ctx) (to-sub su)
-              → Wf-subst ctx (to-sub ((v , t) ∷ su))
-wf-sub-insert {ctx} {su} {v} {t} wr vin wf {x} xin =
-  caseᵈ v ＝ x of
-    λ where
-       (yes v=x) →
-           subst (_∈ ctx) v=x vin
-         , (given-yes v=x
-              return (λ q → wf-ty (minus ctx (v ∷ to-sub su .dom))
-                                  (to-sub su $↦ (if ⌊ q ⌋ then t else `` x)))
-              then subst (λ q → wf-ty q (to-sub su $↦ t))
-                         (minus-rem-l ∙ minus-∷-r ⁻¹)
-                         (substs-remove t wf wr))
-       (no v≠x) →
-            Recomputable-×
-             Recomputable-∈ₛ (wf-ty-recomp {t = to-sub ((v , t) ∷ su) $ x})
-             .recompute $
-               erase
-                (∥-∥₁.elim {P = λ _ → (x ∈ₛ ctx)
-                                    ×ₜ wf-ty (minus ctx (v ∷ to-sub su .dom))
-                                             (to-sub ((v , t) ∷ su) $ x)}
-           (λ q → ×-is-of-hlevel 1 hlevel!
-                       (wf-ty-prop {v = minus ctx (v ∷ to-sub su .dom)}
-                                   {t = to-sub ((v , t) ∷ su) $ x}))
-                   [ (λ e → absurd (v≠x (e ⁻¹)))
-                   , (λ x∈′ → let (x∈r , wtx) = wf (⇉∈ₛ $ erase x∈′) in
-                                 rem-⊆ x∈r
-                               , (given-no v≠x
-                             return (λ q → wf-ty (minus ctx (v ∷ to-sub su .dom))
-                                                 (to-sub su $↦ (if ⌊ q ⌋ then t else `` x)))
-                             then subst (λ q → wf-ty q (to-sub su $ x))
-                                        (minus-rem-l ∙ minus-∷-r ⁻¹)
-                                        wtx))
-                   ]ᵤ (∈ₛ⇉ xin .erased))
-
--- failure
-
-data UnifyFailure : List Constr → 𝒰 where
-  occ-fail-l : ∀ {v t lc}
-             → t ≠ `` v → occurs v t
-             → UnifyFailure ((`` v , t) ∷ lc)
-  occ-fail-r : ∀ {v t lc}
-             → t ≠ `` v → occurs v t
-             → UnifyFailure ((t , `` v) ∷ lc)
-  con-app    : ∀ {l r lc}
-             → UnifyFailure ((con , l ⟶ r) ∷ lc)
-  app-con    : ∀ {l r lc}
-             → UnifyFailure ((l ⟶ r , con) ∷ lc)
-  arr-arr    : ∀ {l l' r r' lc}
-             → UnifyFailure ((l , l') ∷ (r , r') ∷ lc) → UnifyFailure ((l ⟶ r , l' ⟶ r') ∷ lc)
-  constr-rec : ∀ {t t' l}
-             → UnifyFailure l → UnifyFailure ((t , t') ∷ l)
-  subs-rec-l : ∀ {v t l}
-             → UnifyFailure (subs (v ≔ t) l) → UnifyFailure ((`` v , t) ∷ l)
-  subs-rec-r : ∀ {v t l}
-             → UnifyFailure (subs (v ≔ t) l) → UnifyFailure ((t , `` v) ∷ l)
-
-Step : 𝒰
-Step = Ty ⊎ Ty
-
--- one-hole context
-Ctx1 : 𝒰
-Ctx1 = List Step
-
--- plugging the hole
-_+:_ : Ctx1 → Ty → Ty
-[]           +: t = t
-(inl r ∷ ps) +: t = (ps +: t) ⟶ r
-(inr l ∷ ps) +: t = l ⟶ (ps +: t)
-
-occ→ctx : ∀ {v t} → occurs v t → Σ[ c ꞉ Ctx1 ] (t ＝ c +: (`` v))
-occ→ctx {t = `` x}   oc        = [] , (ap ``_ (oc ⁻¹))
-occ→ctx {t = p ⟶ q} (inl oc) =
-  let (s , e) = occ→ctx {t = p} oc in
-  (inl q ∷ s) , ap (_⟶ q) e
-occ→ctx {t = p ⟶ q} (inr oc) =
-  let (s , e) = occ→ctx {t = q} oc in
-  (inr p ∷ s) , ap (p ⟶_) e
-
-+:-++ : ∀ {ps qs : Ctx1} {t} → (ps ++ qs) +: t ＝ ps +: (qs +: t)
-+:-++ {ps = []}         = refl
-+:-++ {ps = inl r ∷ ps} = ap (_⟶ r) (+:-++ {ps = ps})
-+:-++ {ps = inr l ∷ ps} = ap (l ⟶_) (+:-++ {ps = ps})
-
-_$↦C_ : Sub → Ctx1 → Ctx1
-_$↦C_ f = map (⊎.dmap (f $↦_) (f $↦_))
-
-+:-subst : ∀ {f : Sub} {ps : Ctx1} {t}
-         → (f $↦ (ps +: t)) ＝ (f $↦C ps) +: (f $↦ t)
-+:-subst     {ps = []}         = refl
-+:-subst {f} {ps = inl r ∷ ps} = ap (_⟶ (f $↦ r)) (+:-subst {ps = ps})
-+:-subst {f} {ps = inr l ∷ ps} = ap ((f $↦ l) ⟶_) (+:-subst {ps = ps})
-
-no-cycle-lemma : ∀ {ps : Ctx1} {t} → ps +: t ＝ t → ps ＝ []
-no-cycle-lemma {ps = []}                       e = refl
-no-cycle-lemma {ps = inl r ∷ ps} {t = `` x}    e = ⊥.absurd (``≠⟶ (e ⁻¹))
-no-cycle-lemma {ps = inr l ∷ ps} {t = `` x}    e = ⊥.absurd (``≠⟶ (e ⁻¹))
-no-cycle-lemma {ps = inl r ∷ ps} {t = p ⟶ q} e =
-  let (ep , _) = ⟶-inj e in
-  false! (no-cycle-lemma {ps = ps ∷r inl q} {t = p}
-          (ap (_+: p) (snoc-append ps) ∙ +:-++ {ps = ps}  ∙ ep))
-no-cycle-lemma {ps = inr l ∷ ps} {t = p ⟶ q} e =
-  let (_ , eq) = ⟶-inj e in
-  false! (no-cycle-lemma {ps = ps ∷r inr p} {t = q}
-          (ap (_+: q) (snoc-append ps) ∙ +:-++ {ps = ps}  ∙ eq))
-no-cycle-lemma {ps = inl r ∷ ps} {t = con}     e = ⊥.absurd (⟶≠con e)
-no-cycle-lemma {ps = inr l ∷ ps} {t = con}     e = ⊥.absurd (⟶≠con e)
-
-no-unify-+var : ∀ {x : Id} {p ps}
-              → ↦𝒫∅ (unifies (`` x) ((p ∷ ps) +: (`` x)))
-no-unify-+var {p} {ps} f u =
-  false! $ no-cycle-lemma ((u ∙ +:-subst {f = f} {ps = p ∷ ps}) ⁻¹)
-
-failure→no-unifier : ∀ {lc} → UnifyFailure lc → ↦𝒫∅ (unifier lc)
-failure→no-unifier (occ-fail-l {t} ne oc) s u with occ→ctx {t = t} oc
-... | []    , e = ne e
-... | p ∷ c , e = no-unify-+var {p = p} s (all-head u ∙ ap (s $↦_) e)
-failure→no-unifier (occ-fail-r {t} ne oc) s u with occ→ctx {t = t} oc
-... | []    , e = ne e
-... | p ∷ c , e = no-unify-+var {p = p} s (all-head u ⁻¹ ∙ ap (s $↦_) e)
-failure→no-unifier  con-app        s u = ⟶≠con (all-head u ⁻¹)
-failure→no-unifier  app-con        s u = ⟶≠con (all-head u)
-failure→no-unifier (arr-arr uf)    s u =
-  failure→no-unifier uf s (unifier-⟶≃ s $ u)
-failure→no-unifier (constr-rec uf) s u =
-  failure→no-unifier uf s (all-tail u)
-failure→no-unifier (subs-rec-l {l} uf) s u =
-  failure→no-unifier uf s (unifier-subs l (all-head u) (all-tail u))
-failure→no-unifier (subs-rec-r {l} uf) s u =
-  failure→no-unifier uf s (unifier-subs l (all-head u ⁻¹) (all-tail u))
-
 -- main algorithm
 
 unify-type : Constrs → 𝒰
@@ -350,21 +299,19 @@ unify-body (ctx , (tl , tr) ∷ lc) ih wcl | yes e with ih (ctx , lc)
                                                          (all-tail wcl)
 unify-body (ctx , (tl , tr) ∷ lc) ih wcl | yes e | inl (su , wsu , mx) =
   inl ( su , wsu
-      -- TODO max lemma ?
-      , ap ((to-sub su) $↦_) e ∷ (mx .fst)
-      , λ f′ → mx .snd f′ ∘ all-tail
-      )
+      , (Max↦≃ (unifier-eq e) (to-sub su) $ mx))
 unify-body (ctx , (tl , tr) ∷ lc) ih wcl | yes e | inr uf = inr (constr-rec uf)
 unify-body (ctx , (`` v      , tr)        ∷ lc) ih wcl | no ne with occurs-dec {v} {t = tr}
 unify-body (ctx , (`` v      , tr)        ∷ lc) ih wcl | no ne | yes oc = inr (occ-fail-l (ne ∘ _⁻¹) oc)
-unify-body (ctx , (`` v      , tr)        ∷ lc) ih wcl | no ne | no noc with ih (rem v ctx , subs (v ≔ tr) lc)
+unify-body (ctx , (`` v      , tr)        ∷ lc) ih wcl | no ne | no noc with ih (rem v ctx , (v ≔ tr) $↦L lc)
                                                                                 (rem<C
-                                                                                   {xs = subs (v ≔ tr) lc} {ys = (`` v , tr) ∷ lc}
-                                                                                   (all-head wcl .fst))
-                                                                                (wf-constr-list-remove (all-head wcl .fst) noc (all-head wcl .snd) (all-tail wcl))
+                                                                                   {xs = (v ≔ tr) $↦L lc} {ys = (`` v , tr) ∷ lc}
+                                                                                   (wf-ty-var (all-head wcl .fst)))
+                                                                                (wf-constr-list-remove (wf-ty-var (all-head wcl .fst))
+                                                                                                       noc (all-head wcl .snd) (all-tail wcl))
 unify-body (ctx , (`` v      , tr)        ∷ lc) ih wcl | no ne | no noc | inl (su , wsu , mx) =
   inl ( (v , tr) ∷ su
-      , wf-sub-insert {su = su} (occurs-wf-ty tr (all-head wcl .snd) noc) (all-head wcl .fst) wsu
+      , wf-sub-insert {su = su} (occurs-wf-ty (all-head wcl .snd) noc) (wf-ty-var (all-head wcl .fst)) wsu
       , (Max↦≃
            (λ f →   ↦𝒫◇-id≃ {p = ↦𝒫× (unifies (`` v) tr) (unifier lc) } f
                   ∙ all-×≃ {P = λ where (x , y) → unifies x y f} ⁻¹)
@@ -383,8 +330,8 @@ unify-body (ctx , (`` v      , tr)        ∷ lc) ih wcl | no ne | no noc | inl 
 unify-body (ctx , (`` v      , tr)        ∷ lc) ih wcl | no ne | no noc | inr uf = inr (subs-rec-l uf)
 unify-body (ctx , (pl ⟶ ql , pr ⟶ qr)  ∷ lc) ih wcl | no ne with ih (ctx , (pl , pr) ∷ (ql , qr) ∷ lc)
                                                                        (app-lt-constraints {l = pl} {l′ = pr} {r = ql} {r′ = qr} {lc = lc})
-                                                                       (  (all-head wcl .fst .fst , all-head wcl .snd .fst)
-                                                                        ∷ (all-head wcl .fst .snd , all-head wcl .snd .snd)
+                                                                       (  (wf-ty-arr (all-head wcl .fst) .fst , wf-ty-arr (all-head wcl .snd) .fst)
+                                                                        ∷ (wf-ty-arr (all-head wcl .fst) .snd , wf-ty-arr (all-head wcl .snd) .snd)
                                                                         ∷ all-tail wcl)
 unify-body (ctx , (pl ⟶ ql , pr ⟶ qr)  ∷ lc) ih wcl | no ne | inl (su , wsu , mx) =
   inl ( su
@@ -400,14 +347,15 @@ unify-body (ctx , (con       , pr ⟶ qr) ∷ lc) ih wcl | no ne = inr con-app
 unify-body (ctx , (con       , con)       ∷ lc) ih wcl | no ne = absurd (ne refl)
 unify-body (ctx , (tl        , `` v)      ∷ lc) ih wcl | no ne with occurs-dec {v} {t = tl}
 unify-body (ctx , (tl        , `` v)      ∷ lc) ih wcl | no ne | yes oc = inr (occ-fail-r ne oc)
-unify-body (ctx , (tl        , `` v)      ∷ lc) ih wcl | no ne | no noc with ih (rem v ctx , subs (v ≔ tl) lc)
+unify-body (ctx , (tl        , `` v)      ∷ lc) ih wcl | no ne | no noc with ih (rem v ctx , (v ≔ tl) $↦L lc)
                                                                                 (rem<C
-                                                                                   {xs = subs (v ≔ tl) lc} {ys = (tl , `` v) ∷ lc}
-                                                                                   (all-head wcl .snd))
-                                                                                (wf-constr-list-remove (all-head wcl .snd) noc (all-head wcl .fst) (all-tail wcl))
+                                                                                   {xs = (v ≔ tl) $↦L lc} {ys = (tl , `` v) ∷ lc}
+                                                                                   (wf-ty-var (all-head wcl .snd))
+                                                                                   )
+                                                                                (wf-constr-list-remove (wf-ty-var (all-head wcl .snd)) noc (all-head wcl .fst) (all-tail wcl))
 unify-body (ctx , (tl        , `` v)      ∷ lc) ih wcl | no ne | no noc | inl (su , wsu , mx) =
   inl ((v , tl) ∷ su
-      , wf-sub-insert {su = su} (occurs-wf-ty tl (all-head wcl .fst) noc) (all-head wcl .snd) wsu
+      , wf-sub-insert {su = su} (occurs-wf-ty (all-head wcl .fst) noc) (wf-ty-var (all-head wcl .snd)) wsu
       , (Max↦≃
            (λ f →   ↦𝒫◇-id≃ {p = ↦𝒫× (unifies tl (`` v)) (unifier lc) } f
                   ∙ all-×≃ {P = λ where (x , y) → unifies x y f} ⁻¹)
@@ -427,3 +375,4 @@ unify-body (ctx , (tl        , `` v)      ∷ lc) ih wcl | no ne | no noc | inr 
 
 unify : (l : Constrs) → unify-type l
 unify = to-induction <C-wf unify-type unify-body
+

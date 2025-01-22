@@ -160,6 +160,11 @@ instance
   Refl-x∉ₛ[] : {x : A} → Reflects (x ∈ₛ []) false
   Refl-x∉ₛ[] = ofⁿ ∉ₛ[]
 
+∈ₛ-∷→ᴱ : {z x : A} {xs : LFSet A} → z ∈ₛ (x ∷ xs) → Erased ((z ＝ x) ⊎₁ (z ∈ₛ xs))
+∈ₛ-∷→ᴱ z∈∷ =
+  erase $
+    map (map-r (λ q → ⇉∈ₛ $ erase q)) ((∈ₛ⇉ z∈∷) .erased)
+
 ∈ₛ-∷=ᴱ : {z : A} {s : LFSet A}
        → z ∈ₛ s → Erased (z ∷ s ＝ s)
 ∈ₛ-∷=ᴱ {z} {s} = elim-prop go s
@@ -167,7 +172,7 @@ instance
   go : Elim-prop λ q → z ∈ₛ q → Erased (z ∷ q ＝ q)
   go .[]ʳ = false! ⦃ Refl-x∉ₛ[] ⦄ -- why
   go .∷ʳ x {xs} ih z∈ =
-    erase
+     erase
       ((rec! [ (λ e → ap (_∷ x ∷ xs) e ∙ drop)
              , (λ z∈′ → swap ∙ ap (x ∷_) (ih (⇉∈ₛ (erase z∈′)) .erased))
              ]ᵤ (∈ₛ⇉ z∈ .erased)))
@@ -322,8 +327,6 @@ opaque
          → rem ⦃ d ⦄ x s ⊆ s
   rem-⊆ = filter-⊆
 
-opaque
-  unfolding filterₛ rem
   -- TODO generalize to filter?
   rem-∉ : ⦃ d : is-discrete A ⦄ {s : LFSet A} {z : A}
          → z ∉ s → rem z s ＝ s
@@ -503,3 +506,12 @@ filter-size-neg {p} {s} {z} npz z∈ =
   ≤→<⊎= (filter-size≤ {p = p} {s = s}) &
   [ id
   , (λ r → absurd (so-not npz (all←filter-size= r z∈))) ]ᵤ
+
+opaque
+  unfolding rem
+  rem-size-neg : ⦃ d : is-discrete A ⦄ {s : LFSet A} {z : A}
+               → z ∈ s → sizeₛ (rem z s) < sizeₛ s
+  rem-size-neg {z} z∈ =
+    filter-size-neg
+      (subst So (not-invol (z =? z) ⁻¹) (true→so! ⦃ Reflects-does {P = z ＝ z} ⦄ refl))
+      z∈

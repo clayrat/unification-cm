@@ -21,16 +21,16 @@ open import Data.AF
 open import Data.Acc
 open import Order.Constructions.Lex
 
-open import Nominal.Ty
+open import Nominal.Term
 
 -- occurs check
 
-occurs : Id → Ty → 𝒰
+occurs : Id → Term → 𝒰
 occurs v (`` x)    = v ＝ x
 occurs v (p ⟶ q) = occurs v p ⊎ occurs v q
 occurs v con       = ⊥
 
-occurs? : Id → Ty → Bool
+occurs? : Id → Term → Bool
 occurs? v (`` x)    = v == x
 occurs? v (p ⟶ q) = occurs? v p or occurs? v q
 occurs? v con       = false
@@ -49,10 +49,10 @@ occurs-dec {v} {t} .proof = occurs-reflects {v} {t}
 -- constraints
 
 Constr : 𝒰
-Constr = Ty × Ty
+Constr = Term × Term
 
 constr-size : Constr → ℕ
-constr-size (p , q) = ty-size p + ty-size q
+constr-size (p , q) = tm-size p + tm-size q
 
 list-measure : List Constr → ℕ
 list-measure = List.rec 0 λ c → constr-size c +_
@@ -101,30 +101,30 @@ minus-remove {c1} (c ∷ c2) {x} =
 
 -- well-formedness
 
-wf-ty : Varctx → Ty → 𝒰
-wf-ty c (`` x)    = x ∈ c
-wf-ty c (p ⟶ q) = wf-ty c p × wf-ty c q
-wf-ty c con       = ⊤
+wf-tm : Varctx → Term → 𝒰
+wf-tm c (`` x)    = x ∈ c
+wf-tm c (p ⟶ q) = wf-tm c p × wf-tm c q
+wf-tm c con       = ⊤
 
 wf-constr-list : Varctx → List Constr → 𝒰
-wf-constr-list c l = All (λ x → wf-ty c (x .fst) × wf-ty c (x .snd)) l
+wf-constr-list c l = All (λ x → wf-tm c (x .fst) × wf-tm c (x .snd)) l
 
-wf-ty-end : ∀ {a c} t → wf-ty c t → wf-ty (c ∷r a) t
-wf-ty-end (`` x)    w         = any-∷r-init w
-wf-ty-end (p ⟶ q) (wp , wq) = wf-ty-end p wp , wf-ty-end q wq
-wf-ty-end con       w         = tt
+wf-tm-end : ∀ {a c} t → wf-tm c t → wf-tm (c ∷r a) t
+wf-tm-end (`` x)    w         = any-∷r-init w
+wf-tm-end (p ⟶ q) (wp , wq) = wf-tm-end p wp , wf-tm-end q wq
+wf-tm-end con       w         = tt
 
-wf-ty-weaken : ∀ {c1} c2 t → wf-ty c1 t → wf-ty (c1 ++ c2) t
-wf-ty-weaken {c1} []       t w = subst (λ q → wf-ty q t) (++-id-r c1 ⁻¹) w
-wf-ty-weaken {c1} (c ∷ c2) t w =
-  subst (λ q → wf-ty q t) (++-snoc c1 c2 c) $
-  wf-ty-weaken {c1 = c1 ∷r c} c2 t (wf-ty-end t w)
+wf-tm-weaken : ∀ {c1} c2 t → wf-tm c1 t → wf-tm (c1 ++ c2) t
+wf-tm-weaken {c1} []       t w = subst (λ q → wf-tm q t) (++-id-r c1 ⁻¹) w
+wf-tm-weaken {c1} (c ∷ c2) t w =
+  subst (λ q → wf-tm q t) (++-snoc c1 c2 c) $
+  wf-tm-weaken {c1 = c1 ∷r c} c2 t (wf-tm-end t w)
 
 wf-constr-weaken : ∀ {d cs}
                  → wf-constr-list d cs
                  → ∀ d′ → wf-constr-list (d ++ d′) cs
 wf-constr-weaken wcl d′ =
-  all-map (λ {x} (w1 , w2) → wf-ty-weaken d′ (x .fst) w1 , wf-ty-weaken d′ (x .snd) w2) wcl
+  all-map (λ {x} (w1 , w2) → wf-tm-weaken d′ (x .fst) w1 , wf-tm-weaken d′ (x .snd) w2) wcl
 
 wf-constr-weaken-∷r : ∀ {d cs}
                     → wf-constr-list d cs
@@ -133,32 +133,32 @@ wf-constr-weaken-∷r {d} {cs} wcl {c} =
   subst (λ q → wf-constr-list q cs) (snoc-append d ⁻¹) $
   wf-constr-weaken wcl (c ∷ [])
 
-wf-ty-remove-weak : ∀ {x c} t → wf-ty (rem x c) t → wf-ty c t
-wf-ty-remove-weak (`` x)    w         = ope→subset filter-OPE w
-wf-ty-remove-weak (p ⟶ q) (wp , wq) = wf-ty-remove-weak p wp , wf-ty-remove-weak q wq
-wf-ty-remove-weak con       w         = tt
+wf-tm-remove-weak : ∀ {x c} t → wf-tm (rem x c) t → wf-tm c t
+wf-tm-remove-weak (`` x)    w         = ope→subset filter-OPE w
+wf-tm-remove-weak (p ⟶ q) (wp , wq) = wf-tm-remove-weak p wp , wf-tm-remove-weak q wq
+wf-tm-remove-weak con       w         = tt
 
-wf-ty-minus-weaken : ∀ {c1} c2 {t} → wf-ty (minus c1 c2) t → wf-ty c1 t
-wf-ty-minus-weaken []                w = w
-wf-ty-minus-weaken {c1} (c ∷ c2) {t} w =
-  wf-ty-minus-weaken c2 {t = t} $ wf-ty-remove-weak t w
+wf-tm-minus-weaken : ∀ {c1} c2 {t} → wf-tm (minus c1 c2) t → wf-tm c1 t
+wf-tm-minus-weaken []                w = w
+wf-tm-minus-weaken {c1} (c ∷ c2) {t} w =
+  wf-tm-minus-weaken c2 {t = t} $ wf-tm-remove-weak t w
 
-occurs-wf-ty : ∀ {v c} t → wf-ty c t → ¬ occurs v t → wf-ty (rem v c) t
-occurs-wf-ty (`` x)    w         noc =
+occurs-wf-tm : ∀ {v c} t → wf-tm c t → ¬ occurs v t → wf-tm (rem v c) t
+occurs-wf-tm (`` x)    w         noc =
   ∈-filter (not-so (contra (_⁻¹ ∘ so→true!) noc)) w
-occurs-wf-ty (p ⟶ q) (wp , wq) noc =
-  occurs-wf-ty p wp (contra inl noc) , occurs-wf-ty q wq (contra inr noc)
-occurs-wf-ty  con      w         noc = tt
+occurs-wf-tm (p ⟶ q) (wp , wq) noc =
+  occurs-wf-tm p wp (contra inl noc) , occurs-wf-tm q wq (contra inr noc)
+occurs-wf-tm  con      w         noc = tt
 
-wf-ty-occurs : ∀ {v c} t → wf-ty (rem v c) t → (¬ occurs v t) × wf-ty c t
-wf-ty-occurs (`` x)    w =
+wf-tm-occurs : ∀ {v c} t → wf-tm (rem v c) t → (¬ occurs v t) × wf-tm c t
+wf-tm-occurs (`` x)    w =
   first (contra (true→so! ∘ _⁻¹) ∘ so-not) (filter-∈ w)
-wf-ty-occurs (p ⟶ q) (wp , wq) =
-  let (np , wp′) = wf-ty-occurs p wp
-      (nq , wq′) = wf-ty-occurs q wq
+wf-tm-occurs (p ⟶ q) (wp , wq) =
+  let (np , wp′) = wf-tm-occurs p wp
+      (nq , wq′) = wf-tm-occurs q wq
     in
   ([ np , nq ]ᵤ) , wp′ , wq′
-wf-ty-occurs  con      w = id , tt
+wf-tm-occurs  con      w = id , tt
 
 -- set of constraints
 
@@ -167,7 +167,7 @@ Constrs = Varctx × List Constr
 
 -- substitution
 
-sub : Ty → Id → Ty → Ty
+sub : Term → Id → Term → Term
 sub t1 x (`` y)    = if x =? y then t1 else `` y
 sub t1 x (p ⟶ q) = sub t1 x p ⟶ sub t1 x q
 sub t1 x con       = con
@@ -182,11 +182,11 @@ sub-occurs     (p ⟶ q) noc =
 sub-occurs      con      noc = refl
 
 subst-rem : ∀ {x c} t
-          → wf-ty c t → x ∈ c
-          → ∀ u → wf-ty (rem x c) u → wf-ty (rem x c) (sub u x t)
+          → wf-tm c t → x ∈ c
+          → ∀ u → wf-tm (rem x c) u → wf-tm (rem x c) (sub u x t)
 subst-rem {x} {c} (`` y)    w         xin u wr =
   Dec.elim
-    {C = λ q → wf-ty (rem x c) (if ⌊ q ⌋ then u else (`` y))}
+    {C = λ q → wf-tm (rem x c) (if ⌊ q ⌋ then u else (`` y))}
     (λ _ → wr)
     (λ ¬p → ∈-filter (not-so (contra (_⁻¹ ∘ so→true!) ¬p)) w)
     (x ≟ y)
@@ -195,22 +195,22 @@ subst-rem        (p ⟶ q) (wp , wq) xin u wr =
 subst-rem         con      w         xin u wr = tt
 
 Substitution : 𝒰
-Substitution = List (Id × Ty)
+Substitution = List (Id × Term)
 
 dom : Substitution → List Id
 dom = map fst
 
 wf-subst : Varctx → Substitution → 𝒰
 wf-subst c []            = ⊤
-wf-subst c ((v , t) ∷ s) = v ∈ c × wf-ty (rem v c) t × wf-subst (rem v c) s
+wf-subst c ((v , t) ∷ s) = v ∈ c × wf-tm (rem v c) t × wf-subst (rem v c) s
 
-apply-subst : Substitution → Ty → Ty
+apply-subst : Substitution → Term → Term
 apply-subst s t = fold-l (λ t′ (v , q) → sub q v t′) t s
 
-substs-remove : ∀ {c t} s → wf-subst c s → wf-ty c t → wf-ty (minus c (dom s)) (apply-subst s t)
+substs-remove : ∀ {c t} s → wf-subst c s → wf-tm c t → wf-tm (minus c (dom s)) (apply-subst s t)
 substs-remove          []             _             w = w
 substs-remove {c} {t} ((i , t1) ∷ s) (ic , wt , ws) w =
-  subst (λ q → wf-ty q (apply-subst s (sub t1 i t))) (minus-remove (dom s)) $
+  subst (λ q → wf-tm q (apply-subst s (sub t1 i t))) (minus-remove (dom s)) $
   substs-remove {c = rem i c} {t = sub t1 i t} s ws (subst-rem t w ic t1 wt)
 
 minus-app : ∀ {c} s {v t} → minus c (dom (s ∷r (v , t))) ＝ rem v (minus c (dom s))
@@ -236,7 +236,7 @@ apply-subst-end {s} {v} {t} {t′} = foldl-∷r t′ (λ t′ (v , q) → sub q 
 apply-subst-append : ∀ {s1 s2 t} → apply-subst (s1 ++ s2) t ＝ apply-subst s2 (apply-subst s1 t)
 apply-subst-append {s1} {s2} {t} = foldl-++ t (λ t′ (v , q) → sub q v t′) s1 s2
 
-apply-subst-idem : ∀ {d s t} → wf-ty (minus d (dom s)) t → apply-subst s t ＝ t
+apply-subst-idem : ∀ {d s t} → wf-tm (minus d (dom s)) t → apply-subst s t ＝ t
 apply-subst-idem     {s = []}          {t = `` v}    wt       = refl
 apply-subst-idem {d} {s = (i , t) ∷ s} {t = `` v}    wt       =
   Dec.elim
@@ -260,14 +260,14 @@ gen-only-add {s} {c1} {c2 = (l , r) ∷ c2} h mem =
 wf-subst-last : ∀ {x t c} s
               → wf-subst c s
               → x ∈ minus c (dom s)
-              → wf-ty (rem x (minus c (dom s))) t
+              → wf-tm (rem x (minus c (dom s))) t
               → wf-subst c (s ∷r (x , t))
 wf-subst-last             []             ws             xi w = xi , w , tt
 wf-subst-last {x} {t} {c} ((v , t′) ∷ s) (vi , wr , ws) xi w =
     vi , wr
   , wf-subst-last {c = rem v c} s ws
      (subst (x ∈_) (minus-remove (dom s) ⁻¹) xi)
-     (subst (λ q → wf-ty (rem x q) t) (minus-remove (dom s) ⁻¹) w)
+     (subst (λ q → wf-tm (rem x q) t) (minus-remove (dom s) ⁻¹) w)
 
 wf-subst-append : ∀ {c s1} s2 → wf-subst c s1 → wf-subst (minus c (dom s1)) s2 → wf-subst c (s1 ++ s2)
 wf-subst-append {c} {s1} []             w1 w2             = subst (wf-subst c) (++-id-r s1 ⁻¹) w1
@@ -292,29 +292,29 @@ unapp-subst-eq : ∀ {l l′ r r′ s}
 unapp-subst-eq {s} eq =
   ⟶-inj (apply-subst-app {s = s} ⁻¹ ∙ eq ∙ apply-subst-app {s = s})
 
-ext-subst-var-ty : ∀ {s s′}
+ext-subst-var-tm : ∀ {s s′}
                  → (∀ {v} → apply-subst s (`` v) ＝ apply-subst s′ (`` v))
                  → ∀ t → apply-subst s t ＝ apply-subst s′ t
-ext-subst-var-ty          ex (`` x)    = ex
-ext-subst-var-ty {s} {s′} ex (p ⟶ q) =
+ext-subst-var-tm          ex (`` x)    = ex
+ext-subst-var-tm {s} {s′} ex (p ⟶ q) =
     apply-subst-app {p = p} {q = q} {s = s}
-  ∙ ap² _⟶_ (ext-subst-var-ty {s = s} {s′ = s′} ex p) (ext-subst-var-ty {s = s} {s′ = s′} ex q)
+  ∙ ap² _⟶_ (ext-subst-var-tm {s = s} {s′ = s′} ex p) (ext-subst-var-tm {s = s} {s′ = s′} ex q)
   ∙ apply-subst-app {p = p} {q = q} {s = s′} ⁻¹
-ext-subst-var-ty {s} {s′} ex con       =
+ext-subst-var-tm {s} {s′} ex con       =
   apply-subst-con {s = s} ∙ apply-subst-con {s = s′} ⁻¹
 
 apply-subst-constrs : Substitution → List Constr → List Constr
 apply-subst-constrs s = map (bimap (apply-subst s) (apply-subst s))
 
 wf-constr-list-remove : ∀ {c v t}
-                      → v ∈ c → ¬ occurs v t → wf-ty c t
+                      → v ∈ c → ¬ occurs v t → wf-tm c t
                       → ∀ {l} → wf-constr-list c l
                       → wf-constr-list (rem v c) (apply-subst-constrs ((v , t) ∷ []) l)
 wf-constr-list-remove {t} vi noc w =
   all→map ∘
   all-map
     λ {x} (wl , wr) →
-        let wrem = occurs-wf-ty t w noc in
+        let wrem = occurs-wf-tm t w noc in
         subst-rem (x .fst) wl vi t wrem , subst-rem (x .snd) wr vi t wrem
 
 -- constraint order
@@ -343,7 +343,7 @@ _≤C_ : Constrs → Constrs → 𝒰
 <C-wf = AF→WF ≤C-af <∩≤C=∅
 
 lt-list-constr-lt-measure : ∀ {t t′ l} → list-measure l < list-measure ((t , t′) ∷ l)
-lt-list-constr-lt-measure {t} = <-+-0lr $ <-+-r $ 0<ty-size {t = t}
+lt-list-constr-lt-measure {t} = <-+-0lr $ <-+-r $ 0<tm-size {t = t}
 
 lt-list-constr-lt-constraints : ∀ {t t′ c l} → (c , l) <C (c , (t , t′) ∷ l)
 lt-list-constr-lt-constraints {t} {t′} {l} =
@@ -353,12 +353,12 @@ app-lt-measure : ∀ {l l′ r r′ lc}
                → list-measure ((l , l′) ∷ (r , r′) ∷ lc) < list-measure ((l ⟶ r , l′ ⟶ r′) ∷ lc)
 app-lt-measure {l} {l′} {r} {r′} {lc} =
   subst (_< list-measure ((l ⟶ r , l′ ⟶ r′) ∷ lc))
-        (+-assoc (ty-size l + ty-size l′) (ty-size r + ty-size r′) (list-measure lc) ⁻¹) $
-  <-≤-+ {m = ty-size l + ty-size l′ + (ty-size r + ty-size r′)}
-    (subst (λ q → ty-size l + ty-size l′ + (ty-size r + ty-size r′) < suc q)
-           (+-suc-r (ty-size l + ty-size r) (ty-size l′ + ty-size r′) ⁻¹) $
-     subst (λ q → ty-size l + ty-size l′ + (ty-size r + ty-size r′) < suc (suc q))
-           (+-interchange (ty-size l) (ty-size l′) (ty-size r) (ty-size r′)) $
+        (+-assoc (tm-size l + tm-size l′) (tm-size r + tm-size r′) (list-measure lc) ⁻¹) $
+  <-≤-+ {m = tm-size l + tm-size l′ + (tm-size r + tm-size r′)}
+    (subst (λ q → tm-size l + tm-size l′ + (tm-size r + tm-size r′) < suc q)
+           (+-suc-r (tm-size l + tm-size r) (tm-size l′ + tm-size r′) ⁻¹) $
+     subst (λ q → tm-size l + tm-size l′ + (tm-size r + tm-size r′) < suc (suc q))
+           (+-interchange (tm-size l) (tm-size l′) (tm-size r) (tm-size r′)) $
      <-+-lr {n = 1})
     (=→≤ refl)
 
@@ -381,18 +381,18 @@ unifier-append : ∀ {v t s} l
 unifier-append     []                   u  = []
 unifier-append {s} ((tl , tr) ∷ l) (e ∷ u) = e ∷ unifier-append {s = s} l u
 
-unify-ty : ∀ {v t' s} t
+unify-tm : ∀ {v t' s} t
          → apply-subst s (`` v) ＝ apply-subst s t'
          → apply-subst s t ＝ apply-subst s (sub t' v t)
-unify-ty {v} {t'} {s} (`` x)    ea =
+unify-tm {v} {t'} {s} (`` x)    ea =
   Dec.elim
     {C = λ q → apply-subst s (`` x) ＝ apply-subst s (if ⌊ q ⌋ then t' else (`` x))}
     (λ evx → ap (apply-subst s ∘ ``_) (evx ⁻¹)  ∙ ea)
     (λ _ → refl)
     (v ≟ x)
-unify-ty         {s} (p ⟶ q) ea =
-  app-subst-eq {s = s} (unify-ty {s = s} p ea) (unify-ty {s = s} q ea)
-unify-ty              con      ea = refl
+unify-tm         {s} (p ⟶ q) ea =
+  app-subst-eq {s = s} (unify-tm {s = s} p ea) (unify-tm {s = s} q ea)
+unify-tm              con      ea = refl
 
 unifier-subst : ∀ {v t s} l
               → apply-subst s (`` v) ＝ apply-subst s t
@@ -400,7 +400,7 @@ unifier-subst : ∀ {v t s} l
               → unifier (apply-subst-constrs ((v , t) ∷ []) l) s
 unifier-subst     []              ea       u  = []
 unifier-subst {s} ((tl , tr) ∷ l) ea (et ∷ u) =
-  unify-ty {s = s} tl ea ⁻¹ ∙ et ∙ unify-ty {s = s} tr ea ∷ unifier-subst {s = s} l ea u
+  unify-tm {s = s} tl ea ⁻¹ ∙ et ∙ unify-tm {s = s} tr ea ∷ unifier-subst {s = s} l ea u
 
 -- failure
 
@@ -460,13 +460,13 @@ unify-body (ctx , (`` v      , tr)        ∷ lc) ih wcl | no ne | no noc | inl 
                                  return (λ q → (if ⌊ q ⌋ then tr else (`` v)) ＝ sub tr v tr)
                                  then sub-occurs tr noc)
            ∷ us)
-      , (all-head wcl .fst , occurs-wf-ty tr (all-head wcl .snd) noc , ws)
+      , (all-head wcl .fst , occurs-wf-tm tr (all-head wcl .snd) noc , ws)
       , λ {s′} u′ → let (ah , at) = all-uncons u′
                         (s″ , prf) = sprf {s′ = s′} (unifier-subst {s = s′} lc ah at)
                       in
                     s″ , λ {v = v′} →
-                           unify-ty {v = v} {s = s′} (`` v′) ah
-                         ∙ ext-subst-var-ty {s = s′} {s′ = s ++ s″} prf (sub tr v (`` v′)))
+                           unify-tm {v = v} {s = s′} (`` v′) ah
+                         ∙ ext-subst-var-tm {s = s′} {s′ = s ++ s″} prf (sub tr v (`` v′)))
 unify-body (ctx , (`` v      , tr)        ∷ lc) ih wcl | no ne | no noc | inr uf = inr (subs-rec {s = (v , tr) ∷ []} uf)
 unify-body (ctx , (pl ⟶ ql , pr ⟶ qr)  ∷ lc) ih wcl | no ne with ih (ctx , (pl , pr) ∷ (ql , qr) ∷ lc)
                                                                        (app-lt-constraints {l = pl} {l′ = pr} {r = ql} {r′ = qr} {lc = lc})
@@ -496,13 +496,13 @@ unify-body (ctx , (tl        , `` v)      ∷ lc) ih wcl | no ne | no noc | inl 
            (ap (apply-subst s) (given-yes (the (v ＝ v) refl)
                                  return (λ q → sub tl v tl ＝ (if ⌊ q ⌋ then tl else (`` v)))
                                  then (sub-occurs tl noc ⁻¹)) ∷ us)
-      , (all-head wcl .snd , occurs-wf-ty tl (all-head wcl .fst) noc , ws)
+      , (all-head wcl .snd , occurs-wf-tm tl (all-head wcl .fst) noc , ws)
       , λ {s′} u′ → let (ah , at) = all-uncons u′
                         (s″ , prf) = sprf {s′ = s′} (unifier-subst {s = s′} lc (ah ⁻¹) at)
                       in
                     s″ , λ {v = v′} →
-                           unify-ty {v = v} {s = s′} (`` v′) (ah ⁻¹)
-                         ∙ ext-subst-var-ty {s = s′} {s′ = s ++ s″} prf (sub tl v (`` v′)))
+                           unify-tm {v = v} {s = s′} (`` v′) (ah ⁻¹)
+                         ∙ ext-subst-var-tm {s = s′} {s′ = s ++ s″} prf (sub tl v (`` v′)))
 unify-body (ctx , (tl        , `` v)      ∷ lc) ih wcl | no ne | no noc | inr uf = inr (subs-rec {s = (v , tl) ∷ []} uf)
 
 unify : (l : Constrs) → unify-type l

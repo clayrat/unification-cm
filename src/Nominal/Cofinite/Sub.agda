@@ -19,7 +19,7 @@ open import Data.Sum as ⊎
 open import LFSet
 open import LFSet.Mem
 
-open import Nominal.Ty
+open import Nominal.Term
 open import Nominal.Cofinite.Base
 
 -- substitution as a cofinitely quantified map
@@ -28,7 +28,7 @@ open import Nominal.Cofinite.Base
 record Sub : 𝒰 where
   constructor is-sub
   field
-    fun : Id → Ty
+    fun : Id → Term
     dom : LFSet Id
     cof : ∀ {x} → x ∉ dom → fun x ＝ `` x
 
@@ -38,7 +38,7 @@ unquoteDecl Sub-Iso = declare-record-iso Sub-Iso (quote Sub)
 unquoteDecl H-Level-Sub = declare-record-hlevel 2 H-Level-Sub (quote Sub)
 
 instance
-  Funlike-Sub : Funlike ur Sub Id (λ _ → Ty)
+  Funlike-Sub : Funlike ur Sub Id (λ _ → Term)
   Funlike-Sub ._#_ = fun
 
 sub-ext : {s₁ s₂ : Sub} → s₁ .fun ＝ s₂ .fun → s₁ .dom ＝ s₂ .dom → s₁ ＝ s₂
@@ -48,7 +48,7 @@ sub-ext {s₁ = is-sub f₁ d₁ c₁} {s₂ = is-sub f₂ d₂ c₂} ef ed =
       (to-pathᴾ ((∀-is-of-hlevel 1 λ x → Π-is-of-hlevel 1 λ x∉ → hlevel 1) _ c₂))
 
 -- applying substitution
-_$↦_ : Sub → Ty → Ty
+_$↦_ : Sub → Term → Term
 s $↦ (`` x)    = s $ x
 s $↦ (p ⟶ q) = (s $↦ p) ⟶ (s $↦ q)
 s $↦ con       = con
@@ -68,7 +68,7 @@ _◇_ : Sub → Sub → Sub
    ap (g $↦_) (f .cof x∉f) ∙ g .cof  x∉g
 
 -- singleton
-_≔_ : Id → Ty → Sub
+_≔_ : Id → Term → Sub
 (v ≔ t) .fun x = if v == x then t else `` x
 (v ≔ t) .dom = v ∷ []
 (v ≔ t) .cof {x} x∉ =
@@ -115,21 +115,19 @@ sub-occurs {t} (`` x)    noc =
 sub-occurs     (p ⟶ q) noc = ap² _⟶_ (sub-occurs p (contra inl noc)) (sub-occurs q (contra inr noc))
 sub-occurs      con      noc = refl
 
-opaque
-  unfolding rem
-  sub-rem : ∀ {x c t}
-            → wf-ty c t
-            → x ∈ c
-            → ∀ u → wf-ty (rem x c) u
-            → wf-ty (rem x c) ((x ≔ u) $↦ t)
-  sub-rem {x} {c} (wf-var {x = y} y∈) x∈ u wr =
-    Dec.elim
-      {C = λ q → wf-ty (rem x c) (if ⌊ q ⌋ then u else (`` y))}
-      (λ _ → wr)
-      (λ ¬p → wf-var (LFSet.Mem.∈-filter {s = c} (not-so (contra so→true! ¬p)) y∈))
-      (x ≟ y)
-  sub-rem (wf-arr wp wq)       x∈ u wr = wf-arr (sub-rem wp x∈ u wr) (sub-rem wq x∈ u wr)
-  sub-rem  wf-con              x∈ u wr = wf-con
+sub-rem : ∀ {x c t}
+          → wf-tm c t
+          → x ∈ c
+          → ∀ u → wf-tm (rem x c) u
+          → wf-tm (rem x c) ((x ≔ u) $↦ t)
+sub-rem {x} {c} (wf-var {x = y} y∈) x∈ u wr =
+  Dec.elim
+    {C = λ q → wf-tm (rem x c) (if ⌊ q ⌋ then u else (`` y))}
+    (λ _ → wr)
+    (λ ¬p → wf-var (rem-∈-≠ (¬p ∘ _⁻¹) y∈))
+    (x ≟ y)
+sub-rem (wf-arr wp wq)       x∈ u wr = wf-arr (sub-rem wp x∈ u wr) (sub-rem wq x∈ u wr)
+sub-rem  wf-con              x∈ u wr = wf-con
 
 thin-$↦ : ∀ {xs f t} → thin xs f $↦ t ＝ f $↦ t
 thin-$↦      {t = `` x} = refl
@@ -172,36 +170,36 @@ _$↦C_ f = map (⊎.dmap (f $↦_) (f $↦_))
 -- TODO decompose into well-formedness and acyclicity
 Wf-subst : Varctx → Sub → 𝒰
 Wf-subst v s =
-  {x : Id} → x ∈ s .dom → x ∈ v × wf-ty (minus v (s .dom)) (s $ x)
+  {x : Id} → x ∈ s .dom → x ∈ v × wf-tm (minus v (s .dom)) (s $ x)
 
 wf-idsub : ∀ {c} → Wf-subst c id↦
 wf-idsub = false! ⦃ Refl-x∉ₛ[] ⦄ -- why
 
 wf-sub-≔ : ∀ {x t v}
          → x ∈ v
-         → wf-ty (rem x v) t
+         → wf-tm (rem x v) t
          → Wf-subst v (x ≔ t)
 wf-sub-≔ {x} {t} {v} x∈ wt {x = y} xi =
   Recomputable-×
-    Recomputable-∈ₛ (wf-ty-recomp {t = if x == y then t else `` y})
+    Recomputable-∈ₛ (wf-tm-recomp {t = if x == y then t else `` y})
     .recompute $
     (erase
-      (elim! {P = λ _ → (y ∈ₛ v) ×ₜ wf-ty (minus v (x ∷ [])) (if x == y then t else (`` y))}
+      (elim! {P = λ _ → (y ∈ₛ v) ×ₜ wf-tm (minus v (x ∷ [])) (if x == y then t else (`` y))}
              [ (λ e →   (subst (_∈ v) (e ⁻¹) x∈)
                       , (given-yes (e ⁻¹)
-                          return (λ q → wf-ty (minus v (x ∷ [])) (if ⌊ q ⌋ then t else (`` y)))
-                          then subst (λ q → wf-ty q t) (ap (rem x)
+                          return (λ q → wf-tm (minus v (x ∷ [])) (if ⌊ q ⌋ then t else (`` y)))
+                          then subst (λ q → wf-tm q t) (ap (rem x)
                                  (  minus-[]-r {s = v} ⁻¹)
                                   ∙ minus-∷-r {x = x} {s = v} {r = []} ⁻¹) wt))
              , false! ]ᵤ
              (∈ₛ⇉ xi .erased)))
 
 substs-remove : ∀ {c : Varctx} {s t}
-              → Wf-subst c s → wf-ty c t
-              → wf-ty (minus c (s. dom)) (s $↦ t)
+              → Wf-subst c s → wf-tm c t
+              → wf-tm (minus c (s. dom)) (s $↦ t)
 substs-remove {c} {s} ws (wf-var {x} x∈) with x ∈? (s .dom)
 ... | yes xi = ws xi .snd
-... | no nxi = subst (wf-ty (minus c (dom s))) (s .cof nxi ⁻¹)
+... | no nxi = subst (wf-tm (minus c (dom s))) (s .cof nxi ⁻¹)
                      (wf-var (∈-minus x∈ nxi))
 substs-remove         ws (wf-arr wp wq) = wf-arr (substs-remove ws wp) (substs-remove ws wq)
 substs-remove         ws  wf-con        = wf-con
@@ -212,19 +210,19 @@ wf-sub-◇ : ∀ {c s1 s2}
 wf-sub-◇ {c} {s1} {s2} ws1 ws2 {x} xx with x ∈? s1 .dom
 ... | yes xi1 =
      ws1 xi1 .fst
-  , (subst (λ q → wf-ty q (s2 $↦ (s1 # x))) (minus-minus {v = c} {s₁ = s1 .dom} {s₂ = s2 .dom}) $
+  , (subst (λ q → wf-tm q (s2 $↦ (s1 # x))) (minus-minus {v = c} {s₁ = s1 .dom} {s₂ = s2 .dom}) $
      substs-remove {s = s2} {-(s1 $ x)-} ws2 (ws1 xi1 .snd))
 ... | no nxi1 =
   Recomputable-×
-    Recomputable-∈ₛ (wf-ty-recomp {t = s2 $↦ (s1 $ x)})
+    Recomputable-∈ₛ (wf-tm-recomp {t = s2 $↦ (s1 $ x)})
       .recompute
         (erase
-           (elim! {P = λ _ → (x ∈ₛ c) ×ₜ wf-ty (minus c (s1 .dom ∪∷ s2 .dom)) (s2 $↦ (s1 $ x))}
+           (elim! {P = λ _ → (x ∈ₛ c) ×ₜ wf-tm (minus c (s1 .dom ∪∷ s2 .dom)) (s2 $↦ (s1 $ x))}
                [ (λ x∈s₁ → absurd (nxi1 x∈s₁))
                , (λ x∈s₂ → let (x∈m , wm) = ws2 x∈s₂ in
                               minus-⊆ {ys = s1 .dom} x∈m
-                            , (subst (λ q → wf-ty (minus c (s1 .dom ∪∷ s2 .dom)) (s2 $↦ q)) (s1 .cof nxi1 ⁻¹) $
-                               subst (λ q → wf-ty q (s2 $ x)) minus-minus $
+                            , (subst (λ q → wf-tm (minus c (s1 .dom ∪∷ s2 .dom)) (s2 $↦ q)) (s1 .cof nxi1 ⁻¹) $
+                               subst (λ q → wf-tm q (s2 $ x)) minus-minus $
                                wm))
                ]ᵤ
                (∈ₛ-∪∷→ {s₁ = s1 .dom} xx .erased)))
@@ -235,13 +233,13 @@ _$↦L_ : Sub → List Constr → List Constr
 _$↦L_ s = map (bimap (s $↦_) (s $↦_))
 
 wf-constr-list-remove : ∀ {c v t}
-                      → v ∈ c → ¬ occurs v t → wf-ty c t
+                      → v ∈ c → ¬ occurs v t → wf-tm c t
                       → ∀ {l} → wf-constr-list c l
                       → wf-constr-list (rem v c) ((v ≔ t) $↦L l)
 wf-constr-list-remove {t} vi noc w =
     all→map ∘ all-map
      λ where {x = l , r} (wl , wr) →
-                let wrem = occurs-wf-ty w noc in
+                let wrem = occurs-wf-tm w noc in
                   (sub-rem wl vi t wrem)
                 , (sub-rem wr vi t wrem)
 

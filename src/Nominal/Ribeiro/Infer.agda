@@ -16,7 +16,7 @@ open import Data.List.Correspondences.Unary.All
 open import Data.List.Correspondences.Unary.Any
 open import Data.List.Operations.Properties
 
-open import Nominal.Ty
+open import Nominal.Term renaming (Term to Ty)
 open import Nominal.Ribeiro.Unify
 
 private variable
@@ -121,11 +121,11 @@ look-just {x} {t} {s} {s′} {g = (y , r) ∷ g}   =
 -- typing context properties
 
 wf-tyctx : Varctx → TyCtx → 𝒰
-wf-tyctx d g = All (wf-ty d ∘ snd) g
+wf-tyctx d g = All (wf-tm d ∘ snd) g
 
 wf-tyctx-weaken : ∀ {d d′ g}
                 → wf-tyctx d g → wf-tyctx (d ++ d′) g
-wf-tyctx-weaken {d′} = all-map λ {x} → wf-ty-weaken d′ (x .snd)
+wf-tyctx-weaken {d′} = all-map λ {x} → wf-tm-weaken d′ (x .snd)
 
 wf-tyctx-weaken-∷r : ∀ {d t g}
                    → wf-tyctx d g → wf-tyctx (d ∷r t) g
@@ -156,7 +156,7 @@ gen-constr-wf : ∀ {g s1 s2 t} e
               → (Σ[ d2 ꞉ List Id ] (s2 .used-vars ＝ s1 .used-vars ++ d2))
               × (Σ[ c2 ꞉ List (Ty × Ty) ] (s2 .constrs ＝ c2 ++ s1 .constrs))
               × (wf-constr-list (s2 .used-vars) (s2 .constrs))
-              × (wf-ty (s2 .used-vars) t)
+              × (wf-tm (s2 .used-vars) t)
 gen-constr-wf {g} {s1} {s2} {t} (` v)     gce wt wcl =
   let (mem , seq) = look-just {g = g} gce in
     ([] , ap used-vars (seq ⁻¹) ∙ ++-id-r (s1 .used-vars) ⁻¹)
@@ -185,10 +185,10 @@ gen-constr-wf {g} {s1} {s2} {t} (p ⌽ q)   gce wt wcl | just (s′ , t′) | �
       ∙ ap (((t′ , (t″ ⟶ (`` s″ .next-tvar))) ∷ ih2c2) ++_) ih1c2e
       ∙ ++-assoc ((t′ , (t″ ⟶ (`` s″ .next-tvar))) ∷ ih2c2) ih1c2 (s1 .constrs) ⁻¹)
   , (subst (λ q → wf-constr-list (q .used-vars) (q .constrs)) (pprf .fst) $
-     ( (wf-ty-end t′ $ subst (λ q → wf-ty q t′) (ih2d2e ⁻¹) $ wf-ty-weaken ih2d2 t′ ih14)
-      , wf-ty-end t″ ih24
+     ( (wf-tm-end t′ $ subst (λ q → wf-tm q t′) (ih2d2e ⁻¹) $ wf-tm-weaken ih2d2 t′ ih14)
+      , wf-tm-end t″ ih24
       , any-∷r-last refl) ∷ wf-constr-weaken-∷r ih23)
-  , (subst (wf-ty (s2 .used-vars)) (pprf .snd) $
+  , (subst (wf-tm (s2 .used-vars)) (pprf .snd) $
      subst (λ q → s″ .next-tvar ∈ q .used-vars) (pprf .fst) $
      any-∷r-last refl)
 gen-constr-wf {g} {s1}          (p ⌽ q)   gce wt wcl | just (s′ , t′) | eq1 | nothing | _ = false! gce
@@ -208,18 +208,18 @@ gen-constr-wf {g} {s1} {s2} {t} (ƛ v ⇒ e) gce wt wcl | just (s′ , t′) | �
   , (  ihc2
      , ap constrs (pprf .fst ⁻¹) ∙ ihc2e)
   , subst (λ q → wf-constr-list (q .used-vars) (q .constrs)) (pprf .fst) ih3
-  , (subst (λ q → wf-ty (s2 .used-vars) q) (pprf .snd) $
+  , (subst (λ q → wf-tm (s2 .used-vars) q) (pprf .snd) $
        (subst (λ q → s1 .next-tvar ∈ q .used-vars) (pprf .fst) $
         subst (λ q → s1 .next-tvar ∈ q) (ihd2e ⁻¹) $
         any-++-l {ys = ihd2} $ any-∷r-last refl)
-     , subst (λ q → wf-ty (q .used-vars) t′) (pprf .fst) ih4)
+     , subst (λ q → wf-tm (q .used-vars) t′) (pprf .fst) ih4)
 gen-constr-wf                   (ƛ v ⇒ e) gce wt wcl | nothing | eq = false! gce
 gen-constr-wf     {s1} {s2}      cst      gce wt wcl =
   let steq = ×-path-inv $ just-inj gce in
     ([] , ap used-vars (steq .fst ⁻¹) ∙ ++-id-r (s1 .used-vars) ⁻¹)
   , ([] , ap constrs (steq .fst ⁻¹))
   , subst (λ q → wf-constr-list (q .used-vars) (q .constrs)) (steq .fst) wcl
-  , subst (wf-ty (s2 .used-vars)) (steq .snd) tt
+  , subst (wf-tm (s2 .used-vars)) (steq .snd) tt
 
 -- TODO code duplication
 -- looks like this part can be removed from the previous lemma

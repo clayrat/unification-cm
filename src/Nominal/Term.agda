@@ -13,6 +13,8 @@ open import Data.Nat.Order.Base
 open import Order.Strict
 open import Order.Constructions.Nat
 
+open import LFSet
+
 -- ids
 
 Id : 𝒰
@@ -105,3 +107,11 @@ tm-size _        = 1
 0<tm-size {t = `` _}    = z<s
 0<tm-size {t = _ ⟶ _} = z<s
 0<tm-size {t = con}     = z<s
+
+-- vars
+
+vars : Term → LFSet Id
+vars (`` x)    = x ∷ []
+vars (p ⟶ q) = vars p ∪∷ vars q
+vars con       = []
+

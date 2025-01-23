@@ -17,6 +17,8 @@ open import Order.Strict
 open import Order.Constructions.Minmax
 open import Order.Constructions.Nat
 
+open import LFSet
+
 -- ids
 
 Id : 𝒰
@@ -68,7 +70,8 @@ module Term-code where
 
     decodes : ∀ {ts₁ ts₂} → Codes ts₁ ts₂ → ts₁ ＝ ts₂
     decodes {ts₁ = []}       {ts₂ = []}       c        = refl
-    decodes {ts₁ = t₁ ∷ ts₁} {ts₂ = t₂ ∷ ts₂} (c , cs) = ap² _∷_ (decode c) (decodes cs)
+    decodes {ts₁ = t₁ ∷ ts₁} {ts₂ = t₂ ∷ ts₂} (c , cs) =
+      ap² {C = λ x xs → List Term} _∷_ (decode c) (decodes cs)
 
 ``-inj : {x y : ℕ} → `` x ＝ `` y → x ＝ y
 ``-inj = Term-code.encode
@@ -152,3 +155,12 @@ mutual
 0<ty-size : ∀ {t} → 0 < term-size t
 0<ty-size {t = `` _}     = z<s
 0<ty-size {t = con s ts} = z<s
+
+mutual
+  vars : Term → LFSet Id
+  vars (`` x)     = x ∷ []
+  vars (con s ts) = vars-list ts
+
+  vars-list : List Term → LFSet Id
+  vars-list []       = []
+  vars-list (t ∷ ts) = vars t ∪∷ vars-list ts

@@ -82,6 +82,22 @@ thin xs s .fun = s .fun
 thin xs s .dom = xs ∪∷ s .dom
 thin xs s .cof x∉ = s .cof (∉ₛ-∪∷ {xs = xs} x∉ .snd)
 
+-- strengthening the domain
+restrict : LFSet Id → Sub → Sub
+restrict xs s .fun x = if x ∈ₛ? xs then s .fun x else `` x
+restrict xs s .dom = filterₛ (λ x → ⌊ x ∈? xs ⌋) (s .dom)
+restrict xs s .cof {x} x∉ =
+  [ (λ sn   →
+     given-no the (x ∉ xs) (so→false! sn)
+        return (λ q → (if ⌊ q ⌋ then s .fun x else (`` x)) ＝ (`` x))
+        then refl)
+  , (λ x∉′ → Dec.elim
+                {C = λ q → (if ⌊ q ⌋ then s .fun x else (`` x)) ＝ (`` x)}
+                (λ _ → s .cof x∉′)
+                (λ _ → refl)
+                (x ∈? xs) )
+  ]ᵤ (filter-∉ x∉)
+
 -- interaction lemmas
 
 sub-id : ∀ {t} → id↦ $↦ t ＝ t
@@ -116,6 +132,8 @@ noc-all-id     {t = p ⟶ q} noca =
   ap² _⟶_ (noc-all-id λ z z∈ → contra inl (noca z z∈))
             (noc-all-id λ z z∈ → contra inr (noca z z∈))
 noc-all-id     {t = con}     noca = refl
+
+-- reverse doesn't seem to hold
 
 sub-occurs : ∀ {v t} u → ¬ occurs v u → u ＝ (v ≔ t) $↦ u
 sub-occurs {v} u noc =
@@ -164,6 +182,17 @@ thin-◇-l {xs} {f} {g} =
 thin-◇-r : ∀ {xs f g} → f ◇ thin xs g ＝ thin xs (f ◇ g)
 thin-◇-r {xs} = sub-ext refl (∪∷-assoc xs ⁻¹)
 
+restrict-$↦ : ∀ {f t xs}
+            → vars t ⊆ xs
+            → restrict xs f $↦ t ＝ f $↦ t
+restrict-$↦ {f} {t = `` x}    sub =
+  ap (λ q → (if q then (f $ x) else (`` x)))
+     (so≃is-true $ true→so! (sub (hereₛ refl)))
+restrict-$↦ {t = p ⟶ q} {xs} sub =
+  ap² _⟶_ (restrict-$↦ {t = p} {xs = xs} λ {x} → sub {x} ∘ ∈ₛ-∪∷←l)
+            (restrict-$↦ {t = q} {xs = xs} λ {x} → sub {x} ∘ ∈ₛ-∪∷←r {s₁ = vars p})
+restrict-$↦ {t = con}         _   = refl
+
 -- substitution on contexts
 
 _$↦C_ : Sub → Ctx1 → Ctx1
@@ -175,10 +204,99 @@ _$↦C_ f = map (⊎.dmap (f $↦_) (f $↦_))
 +:-subst {f} {ps = inl r ∷ ps} = ap (_⟶ (f $↦ r)) (+:-subst {ps = ps})
 +:-subst {f} {ps = inr l ∷ ps} = ap ((f $↦ l) ⟶_) (+:-subst {ps = ps})
 
+--- substitution on lists
+
+_$↦L_ : Sub → List Constr → List Constr
+_$↦L_ s = map (bimap (s $↦_) (s $↦_))
+
+wf-constr-list-remove : ∀ {c v t}
+                      → v ∈ c → ¬ occurs v t → wf-tm c t
+                      → ∀ {l} → wf-constr-list c l
+                      → wf-constr-list (rem v c) ((v ≔ t) $↦L l)
+wf-constr-list-remove {t} vi noc w =
+    all→map ∘ all-map
+     λ where {x = l , r} (wl , wr) →
+                let wrem = occurs-wf-tm w noc in
+                  (sub-rem wl vi t wrem)
+                , (sub-rem wr vi t wrem)
+
+-- substitution properties
+
+↦𝒫 : 𝒰₁
+↦𝒫 = Sub → 𝒰
+
+-- emptiness
+↦𝒫∅ : ↦𝒫 → 𝒰
+↦𝒫∅ p = ∀ s → ¬ p s
+
+-- equivalence
+↦𝒫≃ : ↦𝒫 → ↦𝒫 → 𝒰
+↦𝒫≃ p q = ∀ s → p s ≃ q s
+
+↦𝒫∅≃ : ∀ {p q : ↦𝒫} → ↦𝒫≃ p q → ↦𝒫∅ p ≃ ↦𝒫∅ q
+↦𝒫∅≃ {p} {q} eq =
+  prop-extₑ! (λ np f qf → np f (eq f ⁻¹ $ qf)) (λ nq f pf → nq f (eq f $ pf))
+
+-- product
+↦𝒫× : ↦𝒫 → ↦𝒫 → ↦𝒫
+↦𝒫× p q s = p s × q s
+
+-- extension
+↦𝒫◇ : ↦𝒫 → Sub → ↦𝒫
+↦𝒫◇ p f g = p (g ◇ f)
+
+↦𝒫◇≃ : {p q : ↦𝒫} {f : Sub} → ↦𝒫≃ p q → ↦𝒫≃ (↦𝒫◇ p f) (↦𝒫◇ q f)
+↦𝒫◇≃ {f} eq g = eq (g ◇ f)
+
+↦𝒫◇-id≃ : {p : ↦𝒫} → ↦𝒫≃ (↦𝒫◇ p id↦) p
+↦𝒫◇-id≃ {p} s = =→≃ (ap p ◇-id-r)
+
+-- stability under thinning
+↦thin : ↦𝒫 → 𝒰
+↦thin p = ∀ f w → p f → p (thin w f)
+
+thin↦ : ↦𝒫 → 𝒰
+thin↦ p = ∀ f w → p (thin w f) → p f
+
+-- renaming
+
+-- everything is mapped to a variable
+is-ren : ↦𝒫
+is-ren s = {x : Id} → fibre ``_ (s $ x)
+
+id-ren : is-ren id↦
+id-ren {x} = x , refl
+
+◇-ren : ∀ {f g} → is-ren f → is-ren g → is-ren (f ◇ g)
+◇-ren {f} fr gr {x} =
+  let (y , eg) = gr {x}
+      (z , ef) = fr {y}
+    in
+  z , (ef ∙ ap (f $↦_) eg)
+
+-- alpha-equivalence
+_~α_ : Term → Term → 𝒰
+s ~α t = Σ[ f ꞉ Sub ] Σ[ g ꞉ Sub ] is-ren f × is-ren g × ((f $↦ s) ＝ t) × ((g $↦ t) ＝ s)
+
+~α-refl : ∀ {t} → t ~α t
+~α-refl = id↦ , id↦ , id-ren , id-ren , sub-id , sub-id
+
+~α-sym : ∀ {s t} → s ~α t → t ~α s
+~α-sym (f , g , fr , gr , fs , gt) = g , f , gr , fr , gt , fs
+
+~α-trans : ∀ {r s t} → r ~α s → s ~α t → r ~α t
+~α-trans {r} {s} {t} (f , g , fr , gr , fs , gt) (f′ , g′ , fr′ , gr′ , fs′ , gt′) =
+    f′ ◇ f
+  , g ◇ g′
+  , ◇-ren {f = f′} {g = f} fr′ fr
+  , ◇-ren {f = g} {g = g′} gr gr′
+  , sub-◇ {t = r} ∙ ap (f′ $↦_) fs ∙ fs′
+  , sub-◇ {t = t} ∙ ap (g $↦_) gt′ ∙ gt
+
 -- well-formed substitutions
 
 -- TODO decompose into well-formedness and acyclicity
-Wf-subst : Varctx → Sub → 𝒰
+Wf-subst : Varctx → ↦𝒫
 Wf-subst v s =
   {x : Id} → x ∈ s .dom → x ∈ v × wf-tm (minus v (s .dom)) (s $ x)
 
@@ -254,61 +372,98 @@ wf-sub-idem {s} w =
     (fun-ext λ x → wf-sub-same {s = s} {x = x} w)
     ∪∷-idem
 
---- substitution on lists
+-- "order" on terms
 
-_$↦L_ : Sub → List Constr → List Constr
-_$↦L_ s = map (bimap (s $↦_) (s $↦_))
+_≤t_ : Term → Term → 𝒰
+t ≤t s =
+   Σ[ f ꞉ Sub ] (f $↦ s ＝ t)
 
-wf-constr-list-remove : ∀ {c v t}
-                      → v ∈ c → ¬ occurs v t → wf-tm c t
-                      → ∀ {l} → wf-constr-list c l
-                      → wf-constr-list (rem v c) ((v ≔ t) $↦L l)
-wf-constr-list-remove {t} vi noc w =
-    all→map ∘ all-map
-     λ where {x = l , r} (wl , wr) →
-                let wrem = occurs-wf-tm w noc in
-                  (sub-rem wl vi t wrem)
-                , (sub-rem wr vi t wrem)
+≤t-refl : ∀ {t} → t ≤t t
+≤t-refl = id↦ , sub-id
 
--- substitution properties
+≤t-trans : ∀ {t s q}
+          → t ≤t s → s ≤t q → t ≤t q
+≤t-trans {q} (f , fe) (g , ge) =
+    (f ◇ g)
+  , sub-◇ {t = q} ∙ ap (f $↦_) ge ∙ fe
 
-↦𝒫 : 𝒰₁
-↦𝒫 = Sub → 𝒰
+-- TODO adhoc
+ren-restrict-∪∷ : ∀ {xs ys f}
+                 → is-ren (restrict xs f)
+                 → is-ren (restrict ys f)
+                 → is-ren (restrict (xs ∪∷ ys) f)
+ren-restrict-∪∷ {xs} {ys} {f} rx ry {x} =
+  subst (λ q → Σ[ z ꞉ Id ] ((`` z) ＝ (if q then (f $ x) else (`` x))))
+        (∈ₛ?-∪∷ {s₁ = xs} {s₂ = ys} ⁻¹) $
+  Dec.elim
+      {C = λ q → Σ[ z ꞉ Id ] ((`` z) ＝ (if ⌊ q ⌋ or (x ∈ₛ? ys) then (f $ x) else (`` x)))}
+      (λ x∈ →
+        let (n , e) = rx {x} in
+        n , e ∙ ap (λ q → (if q then (f $ x) else (`` x))) (so≃is-true $ true→so! x∈))
+      (λ _ → ry {x})
+      (x ∈? xs)
 
--- emptiness
-↦𝒫∅ : ↦𝒫 → 𝒰
-↦𝒫∅ p = ∀ s → ¬ p s
+eqv-ren : ∀ {s t f g}
+        → (f $↦ s) ＝ t
+        → (g $↦ t) ＝ s
+        → is-ren (restrict (vars s) f) × is-ren (restrict (vars t) g)
+eqv-ren {s = `` sx}      {t = `` tx} {f} {g}    ef eg =
+    (λ {x} → Dec.elim
+                {C = λ q → Σ[ z ꞉ Id ] ((`` z) ＝ (if ⌊ q ⌋ or false then (f $ x) else (`` x)))}
+                (λ e → tx , ef ⁻¹ ∙ ap (f $_) (e ⁻¹))
+                (λ _ → x , refl)
+                (x ≟ sx))
+  , (λ {x} → Dec.elim
+                {C = λ q → Σ[ z ꞉ Id ] ((`` z) ＝ (if ⌊ q ⌋ or false then (g $ x) else (`` x)))}
+                (λ e → sx , eg ⁻¹ ∙ ap (g $_) (e ⁻¹))
+                (λ _ → x , refl)
+                (x ≟ tx))
+eqv-ren {s = `` x}      {t = tp ⟶ tq} ef eg = false! eg
+eqv-ren {s = `` x}      {t = con}       ef eg = false! eg
+eqv-ren {s = sp ⟶ sq} {t = `` y}      ef eg = false! ef
+eqv-ren {s = sp ⟶ sq} {t = tp ⟶ tq} {f} {g} ef eg =
+  let (egp , egq) = ⟶-inj eg
+      (efp , efq) = ⟶-inj ef
+      (rsp , rtp) = eqv-ren efp egp
+      (rsq , rtq) = eqv-ren efq egq
+    in
+    ren-restrict-∪∷ {xs = vars sp} {f = f} rsp rsq
+  , ren-restrict-∪∷ {xs = vars tp} {f = g} rtp rtq
+eqv-ren {s = sp ⟶ sq} {t = con}       ef eg = false! ef
+eqv-ren {s = con}       {t = `` y}      ef eg = false! ef
+eqv-ren {s = con}       {t = tp ⟶ tq} ef eg = false! ef
+eqv-ren {s = con}       {t = con}       ef eg =
+    (λ {x} → x , refl)
+  , (λ {x} → x , refl)
 
--- equivalence
-↦𝒫≃ : ↦𝒫 → ↦𝒫 → 𝒰
-↦𝒫≃ p q = ∀ s → p s ≃ q s
+-- we only get antisymmetry modulo α-equivalence
+-- this suggests we should quotient by it early on
+≤t-anti-α : ∀ {t s}
+          → t ≤t s → s ≤t t → t ~α s
+≤t-anti-α {t} {s} (f , fe) (g , ge) =
+  let (rf , rg) = eqv-ren fe ge in
+    restrict (vars t) g
+  , restrict (vars s) f
+  , rg
+  , rf
+  , restrict-$↦ {f = g} {t = t} id ∙ ge
+  , restrict-$↦ {f = f} {t = s} id ∙ fe
 
-↦𝒫∅≃ : ∀ {p q : ↦𝒫} → ↦𝒫≃ p q → ↦𝒫∅ p ≃ ↦𝒫∅ q
-↦𝒫∅≃ {p} {q} eq =
-  prop-extₑ! (λ np f qf → np f (eq f ⁻¹ $ qf)) (λ nq f pf → nq f (eq f $ pf))
+-- reverse direction holds trivially
+α-≤t : ∀ {t s}
+     → t ~α s → t ≤t s × s ≤t t
+α-≤t {t} {s} (f , g , fr , gr , fs , gt) = (g , gt) , (f , fs)
 
--- product
-↦𝒫× : ↦𝒫 → ↦𝒫 → ↦𝒫
-↦𝒫× p q s = p s × q s
+{-
+_<t_ : Term → Term → 𝒰
+t <t s = (t ≤t s) × (¬ (s ≤t t))
 
--- extension
-↦𝒫◇ : ↦𝒫 → Sub → ↦𝒫
-↦𝒫◇ p f g = p (g ◇ f)
+-- wat
+≤→≯ : ∀ {t s} → t ≤t s → ¬ (s <t t)
+≤→≯ le (_ , nle) = nle le
+-}
 
-↦𝒫◇≃ : {p q : ↦𝒫} {f : Sub} → ↦𝒫≃ p q → ↦𝒫≃ (↦𝒫◇ p f) (↦𝒫◇ q f)
-↦𝒫◇≃ {f} eq g = eq (g ◇ f)
-
-↦𝒫◇-id≃ : {p : ↦𝒫} → ↦𝒫≃ (↦𝒫◇ p id↦) p
-↦𝒫◇-id≃ {p} s = =→≃ (ap p ◇-id-r)
-
--- stability under thinning
-↦thin : ↦𝒫 → 𝒰
-↦thin p = ∀ f w → p f → p (thin w f)
-
-thin↦ : ↦𝒫 → 𝒰
-thin↦ p = ∀ f w → p (thin w f) → p f
-
--- thinned "order"
+-- thinned "order" on substitutions
 -- these are actually categories, not orders
 -- to get propositionality one should truncate
 

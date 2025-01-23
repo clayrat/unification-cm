@@ -183,6 +183,28 @@ instance
              ]ᵤ (∈ₛ⇉ z∈ .erased)))
   go .truncʳ _ = hlevel!
 
+∈ₛ-∪∷←l : {z : A} {s₁ s₂ : LFSet A}
+        → z ∈ₛ s₁
+        → z ∈ₛ (s₁ ∪∷ s₂)
+∈ₛ-∪∷←l {z} {s₁} {s₂} = elim-prop go s₁
+  where
+  go : Elim-prop λ q → z ∈ₛ q → z ∈ₛ (q ∪∷ s₂)
+  go .[]ʳ = false! ⦃ Refl-x∉ₛ[] ⦄
+  go .∷ʳ x ih z∈∷ =
+    Recomputable-∈ₛ .recompute $ erase
+      (rec! [ hereₛ  , thereₛ ∘ ih ]ᵤ (∈ₛ-∷→ᴱ z∈∷ .erased))
+  go .truncʳ _ = hlevel!
+
+∈ₛ-∪∷←r : {z : A} {s₁ s₂ : LFSet A}
+        → z ∈ₛ s₂
+        → z ∈ₛ (s₁ ∪∷ s₂)
+∈ₛ-∪∷←r {z} {s₁} {s₂} z∈ = elim-prop go s₁
+  where
+  go : Elim-prop λ q → z ∈ₛ (q ∪∷ s₂)
+  go .[]ʳ = z∈
+  go .∷ʳ x = thereₛ
+  go .truncʳ _ = hlevel!
+
 ∈ₛ-∪∷→ : {z : A} {s₁ s₂ : LFSet A}
         → z ∈ₛ (s₁ ∪∷ s₂) → Erased ((z ∈ₛ s₁) ⊎₁ (z ∈ₛ s₂))
 ∈ₛ-∪∷→ {z} {s₁} {s₂} = elim-prop go s₁

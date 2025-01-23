@@ -55,11 +55,11 @@ thin↦-unifier f w = all-map λ where {x = x , y} → thin↦-unifies {s = x} {
 
 DCl-unifies : ∀ {s t} → DCl (unifies s t)
 DCl-unifies {s} {t} f g (fg , fgw , fge) u =
-    (thin↦-unifies {s = s} {t = t} f fgw $
+  thin↦-unifies {s = s} {t = t} f fgw $
      subst (unifies s t) fge $
      (  sub-◇ {s1 = fg} {s2 = g} {t = s}
       ∙ ap (fg $↦_) u
-      ∙ sub-◇ {s1 = fg} {s2 = g} {t = t} ⁻¹))
+      ∙ sub-◇ {s1 = fg} {s2 = g} {t = t} ⁻¹)
 
 DCl-unifier : ∀ {ls} → DCl (unifier ls)
 DCl-unifier {ls} f g le =

@@ -110,6 +110,11 @@ unconsₛ {z} {x} {xs} {B} bp f g z∈∷ =
   ⇉∈ₛ $ erase
     (rec! [ (λ e → absurd (z≠x e)) , id ]ᵤ ((∈ₛ⇉ z∈∷) .erased))
 
+∈ₛ∷-∉ᴱ : {z x : A} {xs : LFSet A} → z ∈ₛ (x ∷ xs) → z ∉ xs → Erased (∥ z ＝ x ∥₁)
+∈ₛ∷-∉ᴱ z∈∷ z∉ =
+  erase (rec! [ ∣_∣₁
+              , (λ z∈ → absurd (z∉ (⇉∈ₛ (erase z∈)))) ]ᵤ ((∈ₛ⇉ z∈∷) .erased))
+
 ∉ₛ-∷ : {z x : A} {xs : LFSet A} → z ≠ x → z ∉ xs → z ∉ (x ∷ xs)
 ∉ₛ-∷ z≠x z∉xs z∈∷ =
   Recomputable-⊥ .recompute $ erase $

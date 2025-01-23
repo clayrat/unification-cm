@@ -11,6 +11,7 @@ open import Data.Bool as Bool hiding (elim ; rec)
 open import Data.Sum
 open import Data.Nat hiding (elim ; rec)
 open import Data.Nat.Two
+open import Data.List as List hiding (elim ; rec ; empty? ; drop)
 
 private variable
   ℓ ℓ′ : Level
@@ -249,3 +250,5 @@ opaque
   rem : ⦃ is-discrete A ⦄ → A → LFSet A → LFSet A
   rem x = filterₛ (not ∘ x =?_)
 
+from-list : List A → LFSet A
+from-list = List.rec [] _∷_

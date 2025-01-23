@@ -22,7 +22,7 @@ open import LFSet.Mem
 open import Nominal.Term
 open import Nominal.Cofinite.Base
 
--- substitution as a cofinitely quantified map
+-- (idempotent) substitution as a cofinitely quantified map
 -- (dom overapproximates the actual domain)
 
 record Sub : 𝒰 where
@@ -101,19 +101,29 @@ sub-◇ {t = con} = refl
 ◇-id-r {s} = sub-ext (fun-ext λ x → refl) refl
 
 ◇-assoc : ∀ {f g h : Sub}
-         → (f ◇ g) ◇ h ＝ f ◇ (g ◇ h)
+          → (f ◇ g) ◇ h ＝ f ◇ (g ◇ h)
 ◇-assoc {f} {g} {h} =
   sub-ext
     (fun-ext λ x → sub-◇ {t = h $ x})
     (∪∷-assoc (h .dom))
 
+noc-all-id : ∀ {s t}
+           → (∀ x → x ∈ s .dom → ¬ occurs x t)
+           → (s $↦ t) ＝ t
+noc-all-id {s} {t = `` x}    noca =
+  s .cof λ x∈ → noca x x∈ refl
+noc-all-id     {t = p ⟶ q} noca =
+  ap² _⟶_ (noc-all-id λ z z∈ → contra inl (noca z z∈))
+            (noc-all-id λ z z∈ → contra inr (noca z z∈))
+noc-all-id     {t = con}     noca = refl
+
 sub-occurs : ∀ {v t} u → ¬ occurs v u → u ＝ (v ≔ t) $↦ u
-sub-occurs {t} (`` x)    noc =
-  given-no noc
-    return (λ q → (`` x) ＝ (if ⌊ q ⌋ then t else (`` x)))
-    then refl
-sub-occurs     (p ⟶ q) noc = ap² _⟶_ (sub-occurs p (contra inl noc)) (sub-occurs q (contra inr noc))
-sub-occurs      con      noc = refl
+sub-occurs {v} u noc =
+  noc-all-id
+    (λ x x∈ oc →
+      Recomputable-⊥ .recompute $ erase $
+        rec! (λ e → noc (subst (λ q → occurs q u) e oc))
+          ((∈ₛ∷-∉ᴱ x∈ ∉ₛ[]) .erased)) ⁻¹
 
 sub-rem : ∀ {x c t}
           → wf-tm c t
@@ -196,7 +206,7 @@ wf-sub-≔ {x} {t} {v} x∈ wt {x = y} xi =
 
 substs-remove : ∀ {c : Varctx} {s t}
               → Wf-subst c s → wf-tm c t
-              → wf-tm (minus c (s. dom)) (s $↦ t)
+              → wf-tm (minus c (s .dom)) (s $↦ t)
 substs-remove {c} {s} ws (wf-var {x} x∈) with x ∈? (s .dom)
 ... | yes xi = ws xi .snd
 ... | no nxi = subst (wf-tm (minus c (dom s))) (s .cof nxi ⁻¹)
@@ -211,7 +221,7 @@ wf-sub-◇ {c} {s1} {s2} ws1 ws2 {x} xx with x ∈? s1 .dom
 ... | yes xi1 =
      ws1 xi1 .fst
   , (subst (λ q → wf-tm q (s2 $↦ (s1 # x))) (minus-minus {v = c} {s₁ = s1 .dom} {s₂ = s2 .dom}) $
-     substs-remove {s = s2} {-(s1 $ x)-} ws2 (ws1 xi1 .snd))
+     substs-remove {s = s2} ws2 (ws1 xi1 .snd))
 ... | no nxi1 =
   Recomputable-×
     Recomputable-∈ₛ (wf-tm-recomp {t = s2 $↦ (s1 $ x)})
@@ -226,6 +236,23 @@ wf-sub-◇ {c} {s1} {s2} ws1 ws2 {x} xx with x ∈? s1 .dom
                                wm))
                ]ᵤ
                (∈ₛ-∪∷→ {s₁ = s1 .dom} xx .erased)))
+
+-- WF substitutions are idempotent
+
+wf-sub-same : ∀ {c s} {x : Id}
+            → Wf-subst c s
+            → (s $↦ (s $ x)) ＝ (s $ x)
+wf-sub-same {s} {x} w with x ∈? (s .dom)
+... | yes xi = noc-all-id (wf-tm-minus-occurs (w xi .snd) .fst)
+... | no nxi = ap (s $↦_) (s .cof nxi)
+
+wf-sub-idem : ∀ {c s}
+            → Wf-subst c s
+            → s ◇ s ＝ s
+wf-sub-idem {s} w =
+  sub-ext
+    (fun-ext λ x → wf-sub-same {s = s} {x = x} w)
+    ∪∷-idem
 
 --- substitution on lists
 

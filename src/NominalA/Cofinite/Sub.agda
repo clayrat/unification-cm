@@ -21,7 +21,7 @@ open import LFSet.Mem
 open import NominalA.Term
 open import NominalA.Cofinite.Base
 
--- substitution as a cofinitely quantified map
+-- (idempotent) substitution as a cofinitely quantified map
 -- (dom overapproximates the actual domain)
 
 record Sub : 𝒰 where
@@ -128,16 +128,29 @@ mutual
     (∪∷-assoc (h .dom))
 
 mutual
-  sub-occurs : ∀ {v t} u → ¬ occurs v u → u ＝ (v ≔ t) $↦ u
-  sub-occurs {t} (`` x)    noc =
-    given-no noc
-      return (λ q → (`` x) ＝ (if ⌊ q ⌋ then t else (`` x)))
-      then refl
-  sub-occurs     (con s ts) noc = ap (con s) (sub-occurs-s ts noc)
+  noc-all-id : ∀ {s t}
+             → (∀ x → x ∈ s .dom → ¬ occurs x t)
+             → (s $↦ t) ＝ t
+  noc-all-id {s} {t = `` x}  noca =
+      s .cof λ x∈ → noca x x∈ refl
+  noc-all-id {t = con sy ts} noca = ap (con sy) (noc-all-ids noca)
 
-  sub-occurs-s : ∀ {v t} ts → ¬ occurs-list v ts → ts ＝ ((v ≔ t) $↦[] ts)
-  sub-occurs-s []       noc = refl
-  sub-occurs-s (t ∷ ts) noc = ap² {C = λ x xs → List Term} _∷_ (sub-occurs t (contra inl noc)) (sub-occurs-s ts (contra inr noc))
+  noc-all-ids : ∀ {s ts}
+              → (∀ x → x ∈ s .dom → ¬ occurs-list x ts)
+              → (s $↦[] ts) ＝ ts
+  noc-all-ids {ts = []}     noca = refl
+  noc-all-ids {ts = t ∷ ts} noca =
+    ap² {C = λ x xs → List Term} _∷_
+      (noc-all-id λ z z∈ → contra inl (noca z z∈))
+      (noc-all-ids λ z z∈ → contra inr (noca z z∈))
+
+sub-occurs : ∀ {v t} u → ¬ occurs v u → u ＝ (v ≔ t) $↦ u
+sub-occurs {v} u noc =
+  noc-all-id
+    (λ x x∈ oc →
+      Recomputable-⊥ .recompute $ erase $
+        rec! (λ e → noc (subst (λ q → occurs q u) e oc))
+          ((∈ₛ∷-∉ᴱ x∈ ∉ₛ[]) .erased)) ⁻¹
 
 mutual
   sub-rem : ∀ {x c t}
@@ -299,6 +312,23 @@ wf-sub-◇ {c} {s1} {s2} ws1 ws2 {x} xx with x ∈? s1 .dom
                ]ᵤ
                (∈ₛ-∪∷→ {s₁ = s1 .dom} xx .erased)))
 
+-- WF substitutions are idempotent
+
+wf-sub-same : ∀ {c s} {x : Id}
+            → Wf-subst c s
+            → (s $↦ (s $ x)) ＝ (s $ x)
+wf-sub-same {s} {x} w with x ∈? (s .dom)
+... | yes xi = noc-all-id (wf-tm-minus-occurs (w xi .snd) .fst)
+... | no nxi = ap (s $↦_) (s .cof nxi)
+
+wf-sub-idem : ∀ {c s}
+            → Wf-subst c s
+            → s ◇ s ＝ s
+wf-sub-idem {s} w =
+  sub-ext
+    (fun-ext λ x → wf-sub-same {s = s} {x = x} w)
+    ∪∷-idem
+
 --- substitution on lists
 
 _$↦L_ : Sub → List Constr → List Constr
@@ -381,8 +411,7 @@ f ≤↦ g =
      ∙ ap (fg ◇_) ehg
      ∙ thin-◇-r {xs = wgh} {f = fg} {g = g}
      ∙ ap (thin wgh) efg
-     ∙ thin-∪∷ {xs = wgh} {ys = wfg} {f = f}
-     )
+     ∙ thin-∪∷ {xs = wgh} {ys = wfg} {f = f})
   )
 
 ≤↦-id : {f : Sub} → f ≤↦ id↦

@@ -178,6 +178,19 @@ wf-tm-minus-occurs {v} {s} {t} = elim-prop go s
     , nihw2 .snd
   go .truncʳ _ = hlevel!
 
+wf-tm-occurs-minus : ∀ {v s t} → wf-tm v t → (∀ x → x ∈ s → ¬ occurs x t) → wf-tm (minus v s) t
+wf-tm-occurs-minus {v} {s} {t} wt = elim-prop go s
+  where
+  go : Elim-prop λ q → (∀ x → x ∈ q → ¬ occurs x t) → wf-tm (minus v q) t
+  go .[]ʳ wm =
+    subst (λ q → wf-tm q t) (minus-[]-r ⁻¹) wt
+  go .∷ʳ x {xs} ih wm =
+    subst (λ q → wf-tm q t) (minus-∷-r {s = v} {r = xs} ⁻¹) $
+    (occurs-wf-tm (ih (λ z z∈ → wm z (thereₛ z∈))) (wm x (hereₛ refl)))
+  go .truncʳ _ = hlevel!
+
+-- well-formed constraint list
+
 wf-constr-list : Varctx → List Constr → 𝒰
 wf-constr-list c l = All (λ x → wf-tm c (x .fst) × wf-tm c (x .snd)) l
 

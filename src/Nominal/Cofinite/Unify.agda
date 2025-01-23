@@ -141,12 +141,12 @@ no-unify-+var : ∀ {x : Id} {p ps}
 no-unify-+var {p} {ps} f u =
   false! $ no-cycle-lemma ((u ∙ +:-subst {f = f} {ps = p ∷ ps}) ⁻¹)
 
--- computational substitution
+-- computational (triangular) substitution
 
-SubC : 𝒰
-SubC = List (Id × Term)
+SubT : 𝒰
+SubT = List (Id × Term)
 
-to-sub : SubC → Sub
+to-sub : SubT → Sub
 to-sub = List.rec id↦ (λ where (x , t) → _◇ (x ≔ t))
 
 wf-sub-insert : ∀ {ctx su v t}
@@ -283,7 +283,7 @@ rem<C {v} vi = inl (rem-size-neg vi)
 unify-type : Constrs → 𝒰
 unify-type (ctx , lc) =
   wf-constr-list ctx lc →
-  (Σ[ s ꞉ SubC ]
+  (Σ[ s ꞉ SubT ]
      (Wf-subst ctx (to-sub s) × Max↦ (unifier lc) (to-sub s)))
   ⊎ UnifyFailure lc
 

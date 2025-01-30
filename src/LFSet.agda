@@ -129,6 +129,7 @@ sng x = x ∷ []
 
 infixr 5 _∪∷_
 
+-- TODO use rec
 _∪∷_ : LFSet A → LFSet A → LFSet A
 []                    ∪∷ ys = ys
 (x ∷ xs)              ∪∷ ys = x ∷ (xs ∪∷ ys)
@@ -147,7 +148,7 @@ trunc xs zs e₁ e₂ i j ∪∷ ys =
   go .∷ʳ x e = ap (x ∷_) e
   go .truncʳ x = hlevel!
 
-∪∷-assoc : ∀ {y z} (x : LFSet A) → x ∪∷ (y ∪∷ z) ＝ (x ∪∷ y) ∪∷ z
+∪∷-assoc : ∀ {y z} (x : LFSet A) → x ∪∷ y ∪∷ z ＝ (x ∪∷ y) ∪∷ z
 ∪∷-assoc {y} {z} = elim-prop go
   where
   go : Elim-prop λ q → q ∪∷ y ∪∷ z ＝ (q ∪∷ y) ∪∷ z
@@ -245,10 +246,56 @@ opaque
     ... | true = ap² (λ a b → if a then x ∷ b else b) (and-id-r (p x)) ih
     go .truncʳ = hlevel!
 
+  filter-or : ∀ {s} {p q : A → Bool}
+             → filterₛ (λ z → p z or q z) s ＝ filterₛ p s ∪∷ filterₛ (λ z → not (p z) and q z) s
+  filter-or {s} {p} {q} = elim-prop go s
+    where
+    go : Elim-prop λ z → filterₛ (λ w → p w or q w) z ＝ filterₛ p z ∪∷ filterₛ (λ w → not (p w) and q w) z
+    go .[]ʳ = refl
+    go .∷ʳ x {xs} ih with p x
+    go .∷ʳ x {xs} ih | false with q x
+    go .∷ʳ x {xs} ih | false | false = ih
+    go .∷ʳ x {xs} ih | false | true = ap (x ∷_) ih ∙ ∪∷-swap {s = filterₛ p xs}
+    go .∷ʳ x {xs} ih | true = ap (x ∷_) ih
+    go .truncʳ = hlevel!
+
+  filter-∪∷ : ∀ {xs ys} {p : A → Bool}
+             → filterₛ p (xs ∪∷ ys) ＝ filterₛ p xs ∪∷ filterₛ p ys
+  filter-∪∷ {xs} {ys} {p} = elim-prop go xs
+    where
+    go : Elim-prop λ q → filterₛ p (q ∪∷ ys) ＝ filterₛ p q ∪∷ filterₛ p ys
+    go .[]ʳ = refl
+    go .∷ʳ x {xs} ih with p x
+    go .∷ʳ x {xs} ih | false = ih
+    go .∷ʳ x {xs} ih | true  = ap (x ∷_) ih
+    go .truncʳ = hlevel!
+
 opaque
   unfolding filterₛ
   rem : ⦃ is-discrete A ⦄ → A → LFSet A → LFSet A
   rem x = filterₛ (not ∘ x =?_)
+
+opaque
+  mapₛ : (A → B) → LFSet A → LFSet B
+  mapₛ {A} {B} f = rec go
+    where
+      go : Rec A (LFSet B)
+      go .[]ʳ = []
+      go .∷ʳ x _ ys = f x ∷ ys
+      go .dropʳ x xs ys = drop
+      go .swapʳ x y xs ys = swap
+      go .truncʳ = hlevel!
+
+opaque
+  bindₛ : (A → LFSet B) → LFSet A → LFSet B
+  bindₛ {A} {B} f = rec go
+    where
+      go : Rec A (LFSet B)
+      go .[]ʳ = []
+      go .∷ʳ x _ ys = f x ∪∷ ys
+      go .dropʳ x xs ys = ∪∷-assoc (f x) ∙ ap (_∪∷ ys) (∪∷-idem {x = f x})
+      go .swapʳ x y xs ys = ∪∷-assoc {y = f y} (f x) ∙ ap (_∪∷ ys) (∪∷-comm {x = f x}) ∙ ∪∷-assoc (f y) ⁻¹
+      go .truncʳ = hlevel!
 
 from-list : List A → LFSet A
 from-list = List.rec [] _∷_

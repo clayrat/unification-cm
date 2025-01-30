@@ -23,7 +23,8 @@ open import Data.Acc
 open import Order.Constructions.Lex
 
 open import LFSet
-open import LFSet.Mem
+open import LFSet.Membership
+open import LFSet.Discrete
 
 open import NominalA.Term
 open import NominalA.Cofinite.Base

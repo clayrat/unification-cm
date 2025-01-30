@@ -17,7 +17,8 @@ open import Data.List.Operations.Properties
 open import Data.Sum as ⊎
 
 open import LFSet
-open import LFSet.Mem
+open import LFSet.Membership
+open import LFSet.Discrete
 
 open import Nominal.Term
 open import Nominal.Cofinite.Base
@@ -85,7 +86,7 @@ thin xs s .cof x∉ = s .cof (∉ₛ-∪∷ {xs = xs} x∉ .snd)
 -- strengthening the domain
 restrict : LFSet Id → Sub → Sub
 restrict xs s .fun x = if x ∈ₛ? xs then s .fun x else `` x
-restrict xs s .dom = filterₛ (λ x → ⌊ x ∈? xs ⌋) (s .dom)
+restrict xs s .dom = filterₛ (_∈ₛ? xs) (s .dom)
 restrict xs s .cof {x} x∉ =
   [ (λ sn   →
      given-no the (x ∉ xs) (so→false! sn)
@@ -97,6 +98,10 @@ restrict xs s .cof {x} x∉ =
                 (λ _ → refl)
                 (x ∈? xs) )
   ]ᵤ (filter-∉ x∉)
+
+-- range
+range : Sub → LFSet Id
+range s = bindₛ (λ x → vars (s $ x)) (s .dom)
 
 -- interaction lemmas
 
@@ -193,6 +198,33 @@ restrict-$↦ {t = p ⟶ q} {xs} sub =
             (restrict-$↦ {t = q} {xs = xs} λ {x} → sub {x} ∘ ∈ₛ-∪∷←r {s₁ = vars p})
 restrict-$↦ {t = con}         _   = refl
 
+vars-eq : ∀ {s s′ t}
+        → ({x : Id} → x ∈ vars t → (s $ x) ＝ (s′ $ x))
+        → (s $↦ t) ＝ (s′ $↦ t)
+vars-eq {s} {s′} {t = `` x}   eq = eq (hereₛ refl)
+vars-eq {s} {s′} {t = p ⟶ q} eq =
+  ap² _⟶_
+    (vars-eq {t = p} (eq ∘ ∈ₛ-∪∷←l))
+    (vars-eq {t = q} (eq ∘ ∈ₛ-∪∷←r {s₁ = vars p}))
+vars-eq {s} {s′} {t = con}    eq = refl
+
+range-eq : ∀ {s s′ t}
+         → ({x : Id} → x ∈ range t → (s $ x) ＝ (s′ $ x))
+         → ({x : Id} → x ∉ dom t → (s $ x) ＝ (s′ $ x))
+         → thin (dom s′) (s ◇ t) ＝ thin (dom s) (s′ ◇ t)
+range-eq {s} {s′} {t} er end =
+  sub-ext
+    (fun-ext λ q → Dec.elim
+                     {C = λ _ → (s $↦ fun t q) ＝ (s′ $↦ fun t q)}
+                     (λ q∈ → vars-eq {t = t $ q} (er ∘ ∈-bind q∈))
+                     (λ q∉ → ap (s $↦_) (t .cof q∉) ∙ end q∉ ∙ ap (s′ $↦_) (t .cof q∉ ⁻¹))
+                     (q ∈? dom t))
+    (  ap (dom s′ ∪∷_) (∪∷-comm {x = t .dom})
+     ∙ ∪∷-assoc {y = s .dom} (dom s′)
+     ∙ ap (_∪∷ dom t) (∪∷-comm {x = s′ .dom})
+     ∙ ∪∷-assoc {y = s′ .dom} (dom s) ⁻¹
+     ∙ ap (dom s ∪∷_) (∪∷-comm {x = s′ .dom}))
+
 -- substitution on contexts
 
 _$↦C_ : Sub → Ctx1 → Ctx1
@@ -258,41 +290,6 @@ wf-constr-list-remove {t} vi noc w =
 thin↦ : ↦𝒫 → 𝒰
 thin↦ p = ∀ f w → p (thin w f) → p f
 
--- renaming
-
--- everything is mapped to a variable
-is-ren : ↦𝒫
-is-ren s = {x : Id} → fibre ``_ (s $ x)
-
-id-ren : is-ren id↦
-id-ren {x} = x , refl
-
-◇-ren : ∀ {f g} → is-ren f → is-ren g → is-ren (f ◇ g)
-◇-ren {f} fr gr {x} =
-  let (y , eg) = gr {x}
-      (z , ef) = fr {y}
-    in
-  z , (ef ∙ ap (f $↦_) eg)
-
--- alpha-equivalence
-_~α_ : Term → Term → 𝒰
-s ~α t = Σ[ f ꞉ Sub ] Σ[ g ꞉ Sub ] is-ren f × is-ren g × ((f $↦ s) ＝ t) × ((g $↦ t) ＝ s)
-
-~α-refl : ∀ {t} → t ~α t
-~α-refl = id↦ , id↦ , id-ren , id-ren , sub-id , sub-id
-
-~α-sym : ∀ {s t} → s ~α t → t ~α s
-~α-sym (f , g , fr , gr , fs , gt) = g , f , gr , fr , gt , fs
-
-~α-trans : ∀ {r s t} → r ~α s → s ~α t → r ~α t
-~α-trans {r} {s} {t} (f , g , fr , gr , fs , gt) (f′ , g′ , fr′ , gr′ , fs′ , gt′) =
-    f′ ◇ f
-  , g ◇ g′
-  , ◇-ren {f = f′} {g = f} fr′ fr
-  , ◇-ren {f = g} {g = g′} gr gr′
-  , sub-◇ {t = r} ∙ ap (f′ $↦_) fs ∙ fs′
-  , sub-◇ {t = t} ∙ ap (g $↦_) gt′ ∙ gt
-
 -- well-formed substitutions
 
 -- TODO decompose into well-formedness and acyclicity
@@ -307,20 +304,14 @@ wf-sub-≔ : ∀ {x t v}
          → x ∈ v
          → wf-tm (rem x v) t
          → Wf-subst v (x ≔ t)
-wf-sub-≔ {x} {t} {v} x∈ wt {x = y} xi =
-  Recomputable-×
-    Recomputable-∈ₛ (wf-tm-recomp {t = if x == y then t else `` y})
-    .recompute $
-    (erase
-      (elim! {P = λ _ → (y ∈ₛ v) ×ₜ wf-tm (minus v (x ∷ [])) (if x == y then t else (`` y))}
-             [ (λ e →   (subst (_∈ v) (e ⁻¹) x∈)
-                      , (given-yes (e ⁻¹)
-                          return (λ q → wf-tm (minus v (x ∷ [])) (if ⌊ q ⌋ then t else (`` y)))
-                          then subst (λ q → wf-tm q t) (ap (rem x)
-                                 (  minus-[]-r {s = v} ⁻¹)
-                                  ∙ minus-∷-r {x = x} {s = v} {r = []} ⁻¹) wt))
-             , false! ]ᵤ
-             (∈ₛ⇉ xi .erased)))
+wf-sub-≔ {x} {t} {v} x∈ wt {x = y} y∈ =
+  let e = ∈ₛ∷-∉ y∈ ∉ₛ[] in
+    subst (_∈ v) (e ⁻¹) x∈
+  , given-yes (e ⁻¹)
+      return (λ q → wf-tm (minus v (x ∷ [])) (if ⌊ q ⌋ then t else (`` y)))
+      then subst (λ q → wf-tm q t) (ap (rem x)
+             (  minus-[]-r {s = v} ⁻¹)
+              ∙ minus-∷-r {x = x} {s = v} {r = []} ⁻¹) wt
 
 substs-remove : ∀ {c : Varctx} {s t}
               → Wf-subst c s → wf-tm c t
@@ -335,25 +326,17 @@ substs-remove         ws  wf-con        = wf-con
 wf-sub-◇ : ∀ {c s1 s2}
           → Wf-subst c s1 → Wf-subst (minus c (s1 .dom)) s2
           → Wf-subst c (s2 ◇ s1)
-wf-sub-◇ {c} {s1} {s2} ws1 ws2 {x} xx with x ∈? s1 .dom
+wf-sub-◇ {c} {s1} {s2} ws1 ws2 {x} x∈∪∷ with x ∈? s1 .dom
 ... | yes xi1 =
      ws1 xi1 .fst
   , (subst (λ q → wf-tm q (s2 $↦ (s1 # x))) (minus-minus {v = c} {s₁ = s1 .dom} {s₂ = s2 .dom}) $
      substs-remove {s = s2} ws2 (ws1 xi1 .snd))
 ... | no nxi1 =
-  Recomputable-×
-    Recomputable-∈ₛ (wf-tm-recomp {t = s2 $↦ (s1 $ x)})
-      .recompute
-        (erase
-           (elim! {P = λ _ → (x ∈ₛ c) ×ₜ wf-tm (minus c (s1 .dom ∪∷ s2 .dom)) (s2 $↦ (s1 $ x))}
-               [ (λ x∈s₁ → absurd (nxi1 x∈s₁))
-               , (λ x∈s₂ → let (x∈m , wm) = ws2 x∈s₂ in
-                              minus-⊆ {ys = s1 .dom} x∈m
-                            , (subst (λ q → wf-tm (minus c (s1 .dom ∪∷ s2 .dom)) (s2 $↦ q)) (s1 .cof nxi1 ⁻¹) $
-                               subst (λ q → wf-tm q (s2 $ x)) minus-minus $
-                               wm))
-               ]ᵤ
-               (∈ₛ-∪∷→ {s₁ = s1 .dom} xx .erased)))
+  let (x∈m , wm) = ws2 (∈ₛ∪∷-∉ x∈∪∷ nxi1) in
+    minus-⊆ {ys = s1 .dom} x∈m
+  , (subst (λ q → wf-tm (minus c (s1 .dom ∪∷ s2 .dom)) (s2 $↦ q)) (s1 .cof nxi1 ⁻¹) $
+     subst (λ q → wf-tm q (s2 $ x)) minus-minus $
+     wm)
 
 -- WF substitutions are idempotent
 
@@ -386,82 +369,6 @@ t ≤t s =
 ≤t-trans {q} (f , fe) (g , ge) =
     (f ◇ g)
   , sub-◇ {t = q} ∙ ap (f $↦_) ge ∙ fe
-
--- TODO adhoc
-ren-restrict-∪∷ : ∀ {xs ys f}
-                 → is-ren (restrict xs f)
-                 → is-ren (restrict ys f)
-                 → is-ren (restrict (xs ∪∷ ys) f)
-ren-restrict-∪∷ {xs} {ys} {f} rx ry {x} =
-  subst (λ q → Σ[ z ꞉ Id ] ((`` z) ＝ (if q then (f $ x) else (`` x))))
-        (∈ₛ?-∪∷ {s₁ = xs} {s₂ = ys} ⁻¹) $
-  Dec.elim
-      {C = λ q → Σ[ z ꞉ Id ] ((`` z) ＝ (if ⌊ q ⌋ or (x ∈ₛ? ys) then (f $ x) else (`` x)))}
-      (λ x∈ →
-        let (n , e) = rx {x} in
-        n , e ∙ ap (λ q → (if q then (f $ x) else (`` x))) (so≃is-true $ true→so! x∈))
-      (λ _ → ry {x})
-      (x ∈? xs)
-
-eqv-ren : ∀ {s t f g}
-        → (f $↦ s) ＝ t
-        → (g $↦ t) ＝ s
-        → is-ren (restrict (vars s) f) × is-ren (restrict (vars t) g)
-eqv-ren {s = `` sx}      {t = `` tx} {f} {g}    ef eg =
-    (λ {x} → Dec.elim
-                {C = λ q → Σ[ z ꞉ Id ] ((`` z) ＝ (if ⌊ q ⌋ or false then (f $ x) else (`` x)))}
-                (λ e → tx , ef ⁻¹ ∙ ap (f $_) (e ⁻¹))
-                (λ _ → x , refl)
-                (x ≟ sx))
-  , (λ {x} → Dec.elim
-                {C = λ q → Σ[ z ꞉ Id ] ((`` z) ＝ (if ⌊ q ⌋ or false then (g $ x) else (`` x)))}
-                (λ e → sx , eg ⁻¹ ∙ ap (g $_) (e ⁻¹))
-                (λ _ → x , refl)
-                (x ≟ tx))
-eqv-ren {s = `` x}      {t = tp ⟶ tq} ef eg = false! eg
-eqv-ren {s = `` x}      {t = con}       ef eg = false! eg
-eqv-ren {s = sp ⟶ sq} {t = `` y}      ef eg = false! ef
-eqv-ren {s = sp ⟶ sq} {t = tp ⟶ tq} {f} {g} ef eg =
-  let (egp , egq) = ⟶-inj eg
-      (efp , efq) = ⟶-inj ef
-      (rsp , rtp) = eqv-ren efp egp
-      (rsq , rtq) = eqv-ren efq egq
-    in
-    ren-restrict-∪∷ {xs = vars sp} {f = f} rsp rsq
-  , ren-restrict-∪∷ {xs = vars tp} {f = g} rtp rtq
-eqv-ren {s = sp ⟶ sq} {t = con}       ef eg = false! ef
-eqv-ren {s = con}       {t = `` y}      ef eg = false! ef
-eqv-ren {s = con}       {t = tp ⟶ tq} ef eg = false! ef
-eqv-ren {s = con}       {t = con}       ef eg =
-    (λ {x} → x , refl)
-  , (λ {x} → x , refl)
-
--- we only get antisymmetry modulo α-equivalence
--- this suggests we should quotient by it early on
-≤t-anti-α : ∀ {t s}
-          → t ≤t s → s ≤t t → t ~α s
-≤t-anti-α {t} {s} (f , fe) (g , ge) =
-  let (rf , rg) = eqv-ren fe ge in
-    restrict (vars t) g
-  , restrict (vars s) f
-  , rg
-  , rf
-  , restrict-$↦ {f = g} {t = t} id ∙ ge
-  , restrict-$↦ {f = f} {t = s} id ∙ fe
-
--- reverse direction holds trivially
-α-≤t : ∀ {t s}
-     → t ~α s → t ≤t s × s ≤t t
-α-≤t {t} {s} (f , g , fr , gr , fs , gt) = (g , gt) , (f , fs)
-
-{-
-_<t_ : Term → Term → 𝒰
-t <t s = (t ≤t s) × (¬ (s ≤t t))
-
--- wat
-≤→≯ : ∀ {t s} → t ≤t s → ¬ (s <t t)
-≤→≯ le (_ , nle) = nle le
--}
 
 -- thinned "order" on substitutions
 -- these are actually categories, not orders

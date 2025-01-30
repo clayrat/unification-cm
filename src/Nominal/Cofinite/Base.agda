@@ -17,7 +17,8 @@ open import Data.List.Operations.Properties
 open import Data.Sum
 
 open import LFSet as LFSet
-open import LFSet.Mem
+open import LFSet.Membership
+open import LFSet.Discrete
 
 open import Nominal.Term
 

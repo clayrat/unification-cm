@@ -14,11 +14,16 @@ open import Data.Nat hiding (elim ; rec)
 open import Data.Nat.Order.Base
 open import Data.Nat.Two
 
+open import Data.List hiding (elim ; rec ; drop)
+open import Data.List.Correspondences.Unary.Unique
+open import Data.List.Correspondences.Unary.Any
+open import Data.List.Membership
+
 open import LFSet
 open import LFSet.Membership
 
 private variable
-  ℓ ℓ′ : Level
+  ℓ ℓ′ ℓ″ : Level
   A : 𝒰 ℓ
   B : 𝒰 ℓ′
 
@@ -91,16 +96,87 @@ instance
   go .∷ʳ x {xs} ih = ap ((z =? x) or_) ih ∙ or-assoc (z =? x) (z ∈ₛ? xs) (z ∈ₛ? s₂) ⁻¹
   go .truncʳ x = hlevel!
 
+∈ₛ-∷= : ⦃ d : is-discrete A ⦄
+      → {z : A} {s : LFSet A}
+      → z ∈ₛ s → z ∷ s ＝ s
+∈ₛ-∷= {z} {s} = elim-prop go s
+  where
+  go : Elim-prop λ q → z ∈ₛ q → z ∷ q ＝ q
+  go .[]ʳ = false! ⦃ Refl-x∉ₛ[] ⦄ -- why
+  go .∷ʳ x {xs} ih z∈ =
+    [ (λ e → ap (_∷ x ∷ xs) e ∙ drop)
+    , (λ z∈′ → swap ∙ ap (x ∷_) (ih z∈′)) ]ᵤ (∈ₛ-∷→ z∈)
+  go .truncʳ _ = hlevel!
+
+list-∈ : ⦃ d : is-discrete A ⦄
+        → {z : A} {xs : List A} → z ∈ₛ from-list xs → z ∈ xs
+list-∈ {xs = List.[]} x∈ = absurd (∉ₛ[] x∈)
+list-∈ {xs = x ∷ xs}  x∈ =
+  [ (λ e → here e)
+  , (λ z∈ → there (list-∈ z∈))
+  ]ᵤ (∈ₛ-∷→ x∈)
+
 opaque
-  unfolding filterₛ rem
+  unfolding allₛ
+  -- TODO this would also work for non-discrete A but P x under Reflects has to be Erased
+  -- TODO factor out allₛ-×≃ : ((z : A) → z ∈ (x ∷ s) → P z) ≃ P x × ((z : A) → z ∈ s → P z)
+  Reflects-allₛ : ⦃ d : is-discrete A ⦄
+               → {s : LFSet A} {P : A → 𝒰 ℓ′} {p : A → Bool}
+               → (∀ x → is-prop (P x))
+               → (∀ x → Reflects (P x) (p x))
+               → Reflects ((x : A) → x ∈ s → P x) (allₛ p s)
+  Reflects-allₛ {A} {s} {P} {p} pp rp = elim-prop go s
+    where
+    go : Elim-prop λ q → Reflects ((x : A) → x ∈ q → P x) (allₛ p q)
+    go .[]ʳ = ofʸ λ x → false! ⦃ Refl-x∉ₛ[] ⦄
+    go .∷ʳ x {xs} ih =
+      Reflects.dmap
+        (λ where (px , ap) y →
+                   [ (λ e → subst P (e ⁻¹) px) , ap y ]ᵤ ∘ ∈ₛ-∷→)
+        (contra λ a → (a x (hereₛ refl)) , (λ y → a y ∘ thereₛ))
+        (Reflects-× ⦃ rp = rp x ⦄ ⦃ rq = ih ⦄)
+    go .truncʳ q =
+      reflects-is-of-hlevel 0 $ Π-is-of-hlevel 1 (fun-is-of-hlevel 1 ∘ pp)
+
+opaque
+  unfolding filterₛ
+  filter-=? : ⦃ d : is-discrete A ⦄ → {z : A} {s : LFSet A}
+            → filterₛ (_=? z) s ＝ (if z ∈ₛ? s then z ∷ [] else [])
+  filter-=? {z} {s} = elim-prop go s
+    where
+    go : Elim-prop λ q → filterₛ (_=? z) q ＝ (if z ∈ₛ? q then z ∷ [] else [])
+    go .[]ʳ = refl
+    go .∷ʳ x {xs} ih =
+      the
+       ((if x =? z then x ∷ filterₛ (_=? z) xs else filterₛ (_=? z) xs) ＝ (if (z =? x) or (z ∈ₛ? xs) then z ∷ [] else [])) $
+       subst (λ q → (if x =? z then x ∷ (filterₛ (_=? z) xs) else filterₛ (_=? z) xs) ＝ (if q or z ∈ₛ? xs then z ∷ [] else []))
+             (=?-sym {x = x}) $
+      Dec.elim
+        {C = λ q → (if ⌊ q ⌋ then x ∷ (filterₛ (_=? z) xs) else filterₛ (_=? z) xs) ＝ (if ⌊ q ⌋ or z ∈ₛ? xs then z ∷ [] else [])}
+        (λ x=z →   ap (_∷ filterₛ (_=? z) xs) x=z
+                 ∙ ap (z ∷_) ih
+                 ∙ Bool.elim
+                      {P = λ q → z ∷ (if q then z ∷ [] else []) ＝ z ∷ []}
+                      drop
+                      refl
+                      (z ∈ₛ? xs))
+        (λ _ → ih)
+        (x ≟ z)
+    go .truncʳ _ = hlevel!
+
+opaque
+  unfolding filterₛ
+  rem : ⦃ is-discrete A ⦄ → A → LFSet A → LFSet A
+  rem x = filterₛ (not ∘ x =?_)
+
   rem-⊆ : ⦃ d : is-discrete A ⦄ → {x : A} {s : LFSet A}
          → rem ⦃ d ⦄ x s ⊆ s
   rem-⊆ = filter-⊆
 
   -- TODO generalize to filter?
-  rem-∉ : ⦃ d : is-discrete A ⦄ {s : LFSet A} {z : A}
+  rem-∉-eq : ⦃ d : is-discrete A ⦄ {s : LFSet A} {z : A}
          → z ∉ s → rem z s ＝ s
-  rem-∉ {s} {z} = elim-prop go s
+  rem-∉-eq {s} {z} = elim-prop go s
     where
     go : Elim-prop λ q → z ∉ q → rem z q ＝ q
     go .[]ʳ _ = refl
@@ -110,6 +186,15 @@ opaque
          return (λ q → (if (not ⌊ q ⌋) then x ∷ rem z xs else rem z xs) ＝ x ∷ xs)
          then ap (x ∷_) (ih z∉)
     go .truncʳ x = hlevel!
+
+  rem-∈-eq : ⦃ d : is-discrete A ⦄ {x : A} {s : LFSet A}
+         → x ∈ s → x ∷ rem x s ＝ s
+  rem-∈-eq {x} {s} x∈ =
+      ap (_∪∷ rem x s)
+         (  if-true (true→so! x∈) ⁻¹
+          ∙ filter-=? {z = x} {s = s} ⁻¹
+          ∙ ap (λ q → filterₛ q s) (fun-ext (λ q → =?-sym {x = q})))
+    ∙ filter-compl {p = x =?_}
 
   ∉-rem : ⦃ d : is-discrete A ⦄ {s : LFSet A} {x z : A}
          → (z ＝ x) ⊎ (z ∉ s)
@@ -125,11 +210,59 @@ opaque
            → z ≠ x → z ∈ₛ s → z ∈ₛ rem x s
   rem-∈-≠ z≠x = ∈-filter (false→so! (z≠x ∘ _⁻¹))
 
--- minus
+-- lfset extensionality
+-- TODO can we implement an erased variant for non-discrete A ?
+
+set-ext : ⦃ is-discrete A ⦄ → {x y : LFSet A} → ((z : A) → z ∈ x ≃ z ∈ y) → x ＝ y
+set-ext {A} {x} {y} e =
+  elim-prop2 go x y e
+  where
+  go : Elim-prop2 λ u w → ((z : A) → z ∈ u ≃ z ∈ w) → u ＝ w
+  go .[][]ʳ _ = refl
+  go .[]∷ʳ y {ys} ih e = false! ⦃ Refl-x∉ₛ[] ⦄ (e y ⁻¹ $ hereₛ refl)
+  go .∷[]ʳ x {xs} ih e = false! ⦃ Refl-x∉ₛ[] ⦄ (e x $ hereₛ refl)
+  go .∷∷ʳ x y {xs} {ys} ih1 ih2 e with x ∈? xs
+  ... | yes x∈ =
+           ∈ₛ-∷= x∈
+         ∙ ih2 (y ∷ ys) λ z →
+             prop-extₑ! (λ z∈xs → e z $ thereₛ z∈xs)
+                        λ z∈∷ → subst (z ∈_) (∈ₛ-∷= x∈) $
+                                 [ (λ z=y  → e z ⁻¹ $ (hereₛ z=y))
+                                 , (λ z∈′ → e z ⁻¹ $ (thereₛ z∈′))
+                                 ]ᵤ (∈ₛ-∷→ z∈∷)
+  ... | no x∉xs with y ∈? ys
+  ... | yes y∈ys = ih1 (λ z → prop-extₑ!
+                                          (λ z∈∷ → subst (z ∈_) (∈ₛ-∷= y∈ys) $ e z $ z∈∷)
+                                          λ z∈ys → e z ⁻¹ $ thereₛ z∈ys)
+                            ∙ ∈ₛ-∷= y∈ys ⁻¹
+  ... | no y∉ys with x ≟ y
+  ... | yes x=y = ap² {C = λ _ _ → LFSet A} _∷_ x=y
+                      (ih2 ys λ z →
+                                prop-extₑ! (λ z∈xs → ∈ₛ∷-≠
+                                                        (contra (λ z=y → subst (_∈ xs) (z=y ∙ x=y ⁻¹) z∈xs) x∉xs)
+                                                        (e z $ thereₛ z∈xs))
+                                            λ z∈ys → ∈ₛ∷-≠
+                                                        (contra (λ z=x → subst (_∈ ys) (z=x ∙ x=y) z∈ys) y∉ys)
+                                                        (e z ⁻¹ $ thereₛ z∈ys))
+  ... | no x≠y =
+            ap (x ∷_) (ih2 (y ∷ rem x ys) λ z →
+                         prop-extₑ!
+                            (λ z∈xs → [ (λ z=y → hereₛ z=y)
+                                       , (λ z∈ys → thereₛ (rem-∈-≠ (contra (λ z=x → subst (_∈ xs) z=x z∈xs) x∉xs) z∈ys))
+                                       ]ᵤ (∈ₛ-∷→ $ e z $ thereₛ z∈xs) )
+                            λ z∈∷rys → [ (λ z=y → subst (_∈ xs) (z=y ⁻¹) (∈ₛ∷-≠ (x≠y ∘ _⁻¹) (e y ⁻¹ $ hereₛ refl)))
+                                       , (λ z∈rys → let (z≠x , z∈ys) = rem-∈ z∈rys in
+                                                     ∈ₛ∷-≠ z≠x (e z ⁻¹ $ thereₛ z∈ys))
+                                       ]ᵤ (∈ₛ-∷→ z∈∷rys))
+          ∙ swap
+          ∙ ap (y ∷_) (rem-∈-eq (∈ₛ∷-≠ x≠y (e x $ hereₛ refl)))
+  go .truncʳ u w = hlevel!
+
+-- minus and intersection
 
 opaque
   unfolding rem
-
+  -- TODO rename _\∷_ ?
   minus : ⦃ is-discrete A ⦄ → LFSet A → LFSet A → LFSet A
   minus xs ys = filterₛ (λ x → not (x ∈ₛ? ys)) xs
 
@@ -177,6 +310,55 @@ opaque
                         ∙ ap not (  or-comm (z ∈ₛ? s₂) (z ∈ₛ? s₁)
                                   ∙ ∈ₛ?-∪∷ {s₁ = s₁} ⁻¹))
 
+opaque
+  unfolding filterₛ
+  _∩∷_ : ⦃ is-discrete A ⦄ → LFSet A → LFSet A → LFSet A
+  xs ∩∷ ys = filterₛ (_∈ₛ? ys) xs
+
+  ∩∷-∈ : ⦃ d : is-discrete A ⦄ → {s t : LFSet A} {x : A}
+        → x ∈ (s ∩∷ t) → x ∈ s × x ∈ t
+  ∩∷-∈ x∈∩ =
+    let (x∈?t , x∈s) = filter-∈ₛ x∈∩ in
+    x∈s , so→true! x∈?t
+
+  ∈-∩∷ : ⦃ d : is-discrete A ⦄ → {s t : LFSet A} {x : A}
+        → x ∈ s → x ∈ t → x ∈ (s ∩∷ t)
+  ∈-∩∷ x∈s x∈t = ∈-filter (true→so! x∈t) x∈s
+
+  ∩∷-zero-l : ⦃ d : is-discrete A ⦄ → {xs : LFSet A} → [] ∩∷ xs ＝ []
+  ∩∷-zero-l = refl
+
+  ∩∷-zero-r : ⦃ d : is-discrete A ⦄ → {xs : LFSet A} → xs ∩∷ [] ＝ []
+  ∩∷-zero-r {xs} = filter-none {s = xs} λ _ → oh
+
+  ∩∷-idem : ⦃ d : is-discrete A ⦄ → {xs : LFSet A} → xs ∩∷ xs ＝ xs
+  ∩∷-idem {xs} = filter-all {s = xs} true→so!
+
+  -- TODO there should be a more general theory of filtering over membership?
+  ∩∷-comm : ⦃ d : is-discrete A ⦄ → {xs ys : LFSet A} → xs ∩∷ ys ＝ ys ∩∷ xs
+  ∩∷-comm ⦃ d ⦄ {xs} {ys} = elim-prop go xs
+    where
+    go : Elim-prop λ q → filterₛ (_∈ₛ? ys) q ＝ filterₛ (_∈ₛ? q) ys
+    go .[]ʳ = ∩∷-zero-r {xs = ys} ⁻¹
+    go .∷ʳ x {xs} ih =
+        Dec.elim
+           {C = λ q → (if ⌊ q ⌋ then x ∷ filterₛ (_∈ₛ? ys) xs else filterₛ (_∈ₛ? ys) xs) ＝
+                      (if ⌊ q ⌋ then x ∷ [] else []) ∪∷ filterₛ (λ q → not (q =? x)) (filterₛ (_∈ₛ? xs) ys)}
+           (λ x∈ →   ap (x ∷_) (ih ∙ filter-compl {s = filterₛ (_∈ₛ? xs) ys} {p = _=? x} ⁻¹)
+                    ∙ ap (_∪∷ filterₛ (not ∘ (_=? x)) (filterₛ (_∈ₛ? xs) ys))
+                         (ap (x ∷_) (filter-=? {z = x} {s = filterₛ (_∈ₛ? xs) ys})
+                          ∙ Bool.elim
+                              {P = λ q → x ∷ (if q then x ∷ [] else []) ＝ x ∷ []}
+                              drop
+                              refl
+                              (x ∈ₛ? filterₛ (_∈ₛ? xs) ys)))
+           (λ x∉ → ih ∙ filter-all (λ {x = z} z∈ → not-so (contra (λ s → subst (_∈ₛ ys) (so→true! s) (filter-∈ₛ z∈ .snd)) x∉)) ⁻¹)
+           (x ∈? ys)
+      ∙ ap (_∪∷ filterₛ (λ q → not (q =? x)) (filterₛ (_∈ₛ? xs) ys)) (filter-=? {z = x} {s = ys} ⁻¹)
+      ∙ ap (filterₛ (_=? x) ys ∪∷_) (filter-and {s = ys} {p = λ q → not (q =? x)} {q = _∈ₛ? xs} ⁻¹)
+      ∙ filter-or {s = ys} {p = _=? x} {q = _∈ₛ? xs} ⁻¹
+    go .truncʳ _ = hlevel!
+
 -- size
 
 calc : ⦃ d : is-discrete A ⦄ → A → LFSet A → ℕ
@@ -218,6 +400,35 @@ opaque
                     then +-comm-assoc (calc x xs) (calc y xs) n)
         (x ≟ y)
     go .truncʳ = hlevel!
+
+  size0 : ⦃ d : is-discrete A ⦄ → {s : LFSet A} → sizeₛ s ＝ 0 → s ＝ []
+  size0 {A} {s} = elim-prop go s
+    where
+    go : Elim-prop λ q → sizeₛ {A = A} q ＝ 0 → q ＝ []
+    go .[]ʳ _ = refl
+    go .∷ʳ x {xs} ih =
+       Dec.elim
+          {C = λ q → bit (not (⌊ q ⌋)) + sizeₛ {A = A} xs ＝ 0 → x ∷ xs ＝ []}
+          (λ x∈ e → false! ⦃ Refl-x∉ₛ[] ⦄ (subst (x ∈_) (ih e) x∈))
+          (λ x∉ → false!)
+          (x ∈? xs)
+    go .truncʳ = hlevel!
+
+  -- TODO can we drop truncation?
+  size>0 : ⦃ d : is-discrete A ⦄ → {s : LFSet A} → 0 < sizeₛ s → ∃[ x ꞉ A ] x ∈ s
+  size>0 {A} {s} = elim-prop go s
+    where
+    go : Elim-prop λ q → 0 < sizeₛ {A = A} q → ∃[ x ꞉ A ] x ∈ q
+    go .[]ʳ = false!
+    go .∷ʳ x _ _ = ∣ x , hereₛ refl ∣₁
+    go .truncʳ _ = hlevel!
+
+  size-unique : ⦃ d : is-discrete A ⦄ → {s : List A} → Uniq s → sizeₛ (from-list s) ＝ length s
+  size-unique []ᵘ       = refl
+  size-unique (x∉ ∷ᵘ u) =
+    ap² _+_
+      (ap (bit ∘ not) (¬so≃is-false $ so-not (false→so! (∉-list x∉))))
+      (size-unique u)
 
 opaque
   unfolding filterₛ sizeₛ

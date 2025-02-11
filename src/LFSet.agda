@@ -14,7 +14,7 @@ open import Data.Nat.Two
 open import Data.List as List hiding (elim ; rec ; empty? ; drop)
 
 private variable
-  ℓ ℓ′ : Level
+  ℓ ℓ′ ℓ″ : Level
   A : 𝒰 ℓ
   B : 𝒰 ℓ′
 
@@ -107,6 +107,44 @@ elim-prop {P} e = elim e′
   e′ .dropʳ x p = to-pathᴾ (E.truncʳ (drop i1) _ (∷ʳ e′ x p))
   e′ .swapʳ x y p = to-pathᴾ (E.truncʳ (swap i1) _ (∷ʳ e′ y (∷ʳ e′ x p)))
   e′ .truncʳ x = is-of-hlevel-suc 1 $ E.truncʳ x
+
+record Elim-prop2 {A : 𝒰 ℓ} {B : 𝒰 ℓ′} (P : LFSet A → LFSet B → 𝒰 ℓ″) : 𝒰 (ℓ ⊔ ℓ′ ⊔ ℓ″) where
+  no-eta-equality
+  field
+    [][]ʳ    : P [] []
+    []∷ʳ     : ∀ y {ys} → P [] ys → P [] (y ∷ ys)
+    ∷[]ʳ     : ∀ x {xs} → P xs [] → P (x ∷ xs) []
+    ∷∷ʳ      : ∀ x y {xs} {ys} → P (x ∷ xs) ys → (∀ ys → P xs ys) → P (x ∷ xs) (y ∷ ys) -- is this correct
+    truncʳ   : ∀ x y → is-prop (P x y)
+
+open Elim-prop2 public
+
+elim-prop2 : {P : LFSet A → LFSet B → 𝒰 ℓ″} → Elim-prop2 P
+           → (xs : LFSet A) → (ys : LFSet B) → P xs ys
+elim-prop2 {A} {B} {P} e xs ys = elim {P = λ xs → ∀ ys → P xs ys} e′ xs ys
+  where
+  module E = Elim-prop2 e
+
+  e′ : Elim λ xs → ∀ ys → P xs ys
+  e′ .[]ʳ = elim e″
+    where
+    e″ : Elim (P [])
+    e″ .[]ʳ = E.[][]ʳ
+    e″ .∷ʳ y {xs = ys} pys = E.[]∷ʳ y pys
+    e″ .dropʳ y p = to-pathᴾ (E.truncʳ [] (drop i1) _ (∷ʳ e″ y p))
+    e″ .swapʳ x y p = to-pathᴾ (E.truncʳ [] (swap i1) _ (∷ʳ e″ y (∷ʳ e″ x p)))
+    e″ .truncʳ ys = is-of-hlevel-suc 1 $ E.truncʳ [] ys
+  e′ .∷ʳ x {xs} p ys = elim e″ ys
+    where
+    e″ : Elim (P (x ∷ xs))
+    e″ .[]ʳ = E.∷[]ʳ x (p [])
+    e″ .∷ʳ y {xs = ys} pys = E.∷∷ʳ x y pys p -- ?
+    e″ .dropʳ y p = to-pathᴾ (E.truncʳ (x ∷ xs) (drop i1) _ (∷ʳ e″ y p))
+    e″ .swapʳ y z p = to-pathᴾ (E.truncʳ (x ∷ xs) (swap i1) _ (∷ʳ e″ z (∷ʳ e″ y p)))
+    e″ .truncʳ ys = is-of-hlevel-suc 1 $ E.truncʳ (x ∷ xs) ys
+  e′ .dropʳ x p = to-pathᴾ (fun-ext λ ys → E.truncʳ (drop i1) ys _ (∷ʳ e′ x p ys))
+  e′ .swapʳ x y p = to-pathᴾ (fun-ext λ ys → E.truncʳ (swap i1) ys _ (∷ʳ e′ y (∷ʳ e′ x p) ys))
+  e′ .truncʳ xs = Π-is-of-hlevel 2 λ ys → is-of-hlevel-suc 1 $ E.truncʳ xs ys
 
 -- empty?
 
@@ -270,10 +308,38 @@ opaque
     go .∷ʳ x {xs} ih | true  = ap (x ∷_) ih
     go .truncʳ = hlevel!
 
+  filter-compl : ∀ {s} {p : A → Bool}
+                 → filterₛ p s ∪∷ filterₛ (not ∘ p) s ＝ s
+  filter-compl {s} {p} = elim-prop go s
+    where
+    go : Elim-prop λ q → filterₛ p q ∪∷ filterₛ (not ∘ p) q ＝ q
+    go .[]ʳ = refl
+    go .∷ʳ x {xs} ih with p x
+    go .∷ʳ x {xs} ih | false = ∪∷-swap {z = x} {s = filterₛ p xs} ⁻¹ ∙ ap (x ∷_) ih
+    go .∷ʳ x {xs} ih | true  = ap (x ∷_) ih
+    go .truncʳ _ = hlevel!
+
 opaque
-  unfolding filterₛ
-  rem : ⦃ is-discrete A ⦄ → A → LFSet A → LFSet A
-  rem x = filterₛ (not ∘ x =?_)
+  allₛ : (A → Bool) → LFSet A → Bool
+  allₛ {A} p = rec go
+    where
+      go : Rec A Bool
+      go .[]ʳ = true
+      go .∷ʳ x _ b = p x and b
+      go .dropʳ x xs b = and-assoc (p x) (p x) b ⁻¹ ∙ ap (_and b) (and-idem (p x))
+      go .swapʳ x y xs b = and-assoc (p x) (p y) b ⁻¹ ∙ ap (_and b) (and-comm (p x) (p y)) ∙ and-assoc (p y) (p x) b
+      go .truncʳ = hlevel!
+
+opaque
+  anyₛ : (A → Bool) → LFSet A → Bool
+  anyₛ {A} p = rec go
+    where
+      go : Rec A Bool
+      go .[]ʳ = false
+      go .∷ʳ x _ b = p x or b
+      go .dropʳ x xs b = or-assoc (p x) (p x) b ⁻¹ ∙ ap (_or b) (or-idem (p x))
+      go .swapʳ x y xs b = or-assoc (p x) (p y) b ⁻¹ ∙ ap (_or b) (or-comm (p x) (p y)) ∙ or-assoc (p y) (p x) b
+      go .truncʳ = hlevel!
 
 opaque
   mapₛ : (A → B) → LFSet A → LFSet B

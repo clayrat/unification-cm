@@ -14,6 +14,10 @@ open import Data.Nat hiding (elim ; rec)
 open import Data.Nat.Order.Base
 open import Data.Nat.Two
 
+open import Data.List hiding ([] ; rec ; drop)
+open import Data.List.Correspondences.Unary.Any
+open import Data.List.Membership
+
 open import LFSet
 
 private variable
@@ -89,6 +93,14 @@ hereₛ e = ⇉∈ₛ $ erase ∣ inl e ∣₁
 thereₛ : {z x : A} {xs : LFSet A} → z ∈ₛ xs → z ∈ₛ x ∷ xs
 thereₛ z∈ = ⇉∈ₛ $ erase ∣ inr ((∈ₛ⇉ z∈) .erased) ∣₁
 
+∉ₛ[] : {x : A} → x ∉ []
+∉ₛ[] x with ∈ₛ⇉ x
+... | ()
+
+instance
+  Refl-x∉ₛ[] : {x : A} → Reflects (x ∈ₛ []) false
+  Refl-x∉ₛ[] = ofⁿ ∉ₛ[]
+
 {-
 -- TODO useless ?
 unconsₛ : {z x : A} {xs : LFSet A}
@@ -125,14 +137,6 @@ unconsₛ {z} {x} {xs} {B} bp f g z∈∷ =
 ∉ₛ-uncons : {z x : A} {xs : LFSet A} → z ∉ (x ∷ xs) → (z ≠ x) × z ∉ xs
 ∉ₛ-uncons z∉∷ = contra hereₛ z∉∷ , contra thereₛ z∉∷
 
-∉ₛ[] : {x : A} → x ∉ []
-∉ₛ[] x with ∈ₛ⇉ x
-... | ()
-
-instance
-  Refl-x∉ₛ[] : {x : A} → Reflects (x ∈ₛ []) false
-  Refl-x∉ₛ[] = ofⁿ ∉ₛ[]
-
 ∈ₛ-∷→ᴱ : {z x : A} {xs : LFSet A} → z ∈ₛ (x ∷ xs) → Erased ((z ＝ x) ⊎₁ (z ∈ₛ xs))
 ∈ₛ-∷→ᴱ z∈∷ =
   erase $
@@ -145,10 +149,10 @@ instance
   go : Elim-prop λ q → z ∈ₛ q → Erased (z ∷ q ＝ q)
   go .[]ʳ = false! ⦃ Refl-x∉ₛ[] ⦄ -- why
   go .∷ʳ x {xs} ih z∈ =
-     erase
-      ((rec! [ (λ e → ap (_∷ x ∷ xs) e ∙ drop)
-             , (λ z∈′ → swap ∙ ap (x ∷_) (ih (⇉∈ₛ (erase z∈′)) .erased))
-             ]ᵤ (∈ₛ⇉ z∈ .erased)))
+    erase
+      (rec! [ (λ e → ap (_∷ x ∷ xs) e ∙ drop)
+             , (λ z∈′ → swap ∙ ap (x ∷_) (ih z∈′ .erased))
+             ]ᵤ (∈ₛ-∷→ᴱ z∈ .erased))
   go .truncʳ _ = hlevel!
 
 ∈ₛ-∪∷←l : {z : A} {s₁ s₂ : LFSet A}
@@ -194,6 +198,11 @@ instance
          , (λ z∈ys → (∈ₛ⇉ z∈ys) .erased) ]ᵤ
          (∈ₛ-∪∷→ᴱ z∈∪∷ .erased))
 
+∪∷-∉ₛ : {z : A} {xs ys : LFSet A}
+       → z ∉ xs → z ∉ ys → z ∉ (xs ∪∷ ys)
+∪∷-∉ₛ z∉xs z∉ys z∈∪∷ =
+  z∉ys (∈ₛ∪∷-∉ z∈∪∷ z∉xs)
+
 ∉ₛ-∪∷ : {z : A} {xs ys : LFSet A}
        → z ∉ (xs ∪∷ ys) → (z ∉ xs) × (z ∉ ys)
 ∉ₛ-∪∷ {z} {xs} {ys} = elim-prop go xs
@@ -212,6 +221,17 @@ instance
     (rec! [ ∣_∣₁ ∘ inl
           , (λ q → ∣ inr (∈ₛ⇉ (sub (⇉∈ₛ (erase q))) .erased) ∣₁) ]ᵤ
           (∈ₛ⇉ x∈ .erased))
+
+∈-list : {x : A} {xs : List A} → x ∈ xs → x ∈ₛ from-list xs
+∈-list {xs = x ∷ xs} (here px)  = hereₛ px
+∈-list {xs = x ∷ xs} (there xi) = thereₛ (∈-list xi)
+
+-- TODO
+-- list-∈ᴱ : {x : A} {xs : List A} → x ∈ₛ from-list xs → Erased ∥ x ∈ xs ∥₁
+
+∉-list : {x : A} {xs : List A} → x ∉ xs → x ∉ from-list xs
+∉-list {xs = List.[]} x∉ = ∉ₛ[]
+∉-list {xs = x ∷ xs}  x∉ = ∉ₛ-∷ (contra here x∉) (∉-list (contra there x∉))
 
 opaque
   unfolding filterₛ
@@ -279,6 +299,19 @@ opaque
       subst (λ q → (if q then x ∷ filterₛ p xs else filterₛ p xs) ＝ x ∷ xs)
             ((so≃is-true $ a (hereₛ refl)) ⁻¹)
             (ap (x ∷_) (ih (a ∘ thereₛ)))
+    go .truncʳ _ = hlevel!
+
+  filter-none : {p : A → Bool} {s : LFSet A}
+             → (∀ {x} → x ∈ s → ⌞ not (p x) ⌟)
+             → filterₛ p s ＝ []
+  filter-none {p} {s} = elim-prop go s
+    where
+    go : Elim-prop λ q → (∀ {x} → x ∈ q → ⌞ not (p x) ⌟) → filterₛ p q ＝ []
+    go .[]ʳ _ = refl
+    go .∷ʳ x {xs} ih a =
+      subst (λ q → (if q then x ∷ filterₛ p xs else filterₛ p xs) ＝ [])
+            ((¬so≃is-false $ so-not (a (hereₛ refl))) ⁻¹)
+            (ih (a ∘ thereₛ))
     go .truncʳ _ = hlevel!
 
   filter-⊆ : {p : A → Bool} {s : LFSet A}

@@ -40,11 +40,11 @@ open import Nominal.Cofinite.Ren
 compat : Ren → Ren → 𝒰
 compat s t = (x : Id) → x ∈ s .supr → x ∈ t .supr → (s .eqvr $ x) ＝ (t .eqvr $ x)
 
-compat? : Ren → Ren → Bool
-compat? s t = allₛ (λ x → (s .eqvr $ x) == (t .eqvr $ x)) (s .supr ∩∷ t .supr)
-
 compat-prop : ∀ {s t} → is-prop (compat s t)
 compat-prop = Π-is-of-hlevel 1 λ x → fun-is-of-hlevel 1 $ fun-is-of-hlevel 1 hlevel!
+
+compat? : Ren → Ren → Bool
+compat? s t = allₛ (λ x → (s .eqvr $ x) == (t .eqvr $ x)) (s .supr ∩∷ t .supr)
 
 Reflects-compat : ∀ {s t} → Reflects (compat s t) (compat? s t)
 Reflects-compat {s} {t} =
@@ -57,8 +57,8 @@ Dec-compat : ∀ s t → Dec (compat s t)
 Dec-compat s t .does = compat? s t
 Dec-compat s t .proof = Reflects-compat {s} {t}
 
-compat-comm : ∀ {s t} → compat s t → compat t s
-compat-comm c x x∈t x∈s = c x x∈s x∈t ⁻¹
+compat-sym : ∀ {s t} → compat s t → compat t s
+compat-sym c x x∈t x∈s = c x x∈s x∈t ⁻¹
 
 compat-iter : ∀ {s t} → compat s t
              → (x : Id) → x ∈ s .supr → x ∈ t .supr
@@ -94,32 +94,55 @@ compat-flp {s} {t} c x x∈s x∈t =
   ∙ compat-iter {s = s} {t = t} c x x∈s x∈t (osize t x)
   ∙ osize-inv {r = t} {x = x} ⁻¹
 
--- union
-
--- adhoc
-aux : ∀ {s t} {x : Id}
-    → compat s t
-    → x ∈ t .supr
-    → x ∉ s .supr
-    → (t .eqvr ⁻¹ $ x) ∉ s .supr
-aux {s} {t} {x} c x∈t =
-  contra λ tx∈s →
-    subst (_∈ₛ s .supr)
-          (  c (t .eqvr ⁻¹ $ x) tx∈s (ren-sup← {r = t} x∈t)
-           ∙ is-equiv→counit (t .eqvr .snd) x) $
-    ren-sup→ {r = s} tx∈s
-
-aux1 : ∀ {s t} {x : Id}
+-- TODO adhoc?
+compat-∈-→ : ∀ {s t} {x : Id}
      → compat s t
-     → x ∈ t .supr
-     → x ∉ s .supr
-     → (t .eqvr $ x) ∉ s .supr
-aux1 {s} {t} {x} c x∈t =
-  contra λ tx∈s →
-    subst (_∈ₛ s .supr)
-          (  compat-flp {s = s} {t = t} c (t .eqvr $ x) tx∈s (ren-sup→ {r = t} x∈t)
-           ∙ is-equiv→unit (t .eqvr .snd) x) $
-    ren-sup← {r = s} tx∈s
+     → (t .eqvr $ x) ∈ s .supr
+     → x ∈ s .supr
+compat-∈-→ {s} {t} {x} c tx∈s =
+  Dec.elim
+    {C = λ _ → x ∈ s .supr}
+    (λ x∈t → subst (_∈ₛ s .supr)
+                    (  compat-flp {s = s} {t = t} c (t .eqvr $ x) tx∈s (ren-sup→ {r = t} x∈t)
+                     ∙ is-equiv→unit (t .eqvr .snd) x) $
+              ren-sup← {r = s} tx∈s)
+    (λ x∉t → subst (_∈ s .supr) (t .cofr x∉t) tx∈s)
+    (x ∈? t .supr)
+
+compat-∈-← : ∀ {s t} {x : Id}
+    → compat s t
+    → (t .eqvr ⁻¹ $ x) ∈ s .supr
+    → x ∈ s .supr
+compat-∈-← {s} {t} {x} c tx∈s =
+  Dec.elim
+    {C = λ _ → x ∈ s .supr}
+    (λ x∈t → subst (_∈ₛ s .supr)
+                    (  c (t .eqvr ⁻¹ $ x) tx∈s (ren-sup← {r = t} x∈t)
+                     ∙ is-equiv→counit (t .eqvr .snd) x) $
+              ren-sup→ {r = s} tx∈s)
+    (λ x∉t → subst (_∈ s .supr) (cofr⁻¹ t x∉t) tx∈s)
+    (x ∈? t .supr)
+
+compat-comm : ∀ {s t} → compat s t → s ◇↔ t ＝ t ◇↔ s
+compat-comm {s} {t} c =
+  ren-ext
+    (equiv-ext $ fun-ext λ z →
+      Dec.elim
+         {C = λ _ → (s .eqvr $ t .eqvr $ z) ＝ (t .eqvr $ s .eqvr $ z)}
+         (λ z∈t → Dec.elim
+                    {C = λ _ → (s .eqvr $ t .eqvr $ z) ＝ (t .eqvr $ s .eqvr $ z)}
+                    (λ z∈s →   ap (s .eqvr $_) (c z z∈s z∈t ⁻¹)
+                              ∙ compat-iter {s = s} {t = t} c z z∈s z∈t 2
+                              ∙ ap (t .eqvr $_) (c z z∈s z∈t ⁻¹))
+                    (λ z∉s →   s .cofr (contra (compat-∈-→ {s = s} {t = t} c) z∉s)
+                              ∙ ap (t .eqvr $_) (s .cofr z∉s ⁻¹))
+                    (z ∈? s .supr))
+         (λ z∉t →   ap (s .eqvr $_) (t .cofr z∉t)
+                   ∙ t .cofr (contra (compat-∈-→ {s = t} {t = s} (compat-sym {s = s} {t = t} c)) z∉t) ⁻¹)
+         (z ∈? t .supr))
+    (∪∷-comm {x = t .supr})
+
+-- union
 
 compat-∪≃ : (s t : Ren) → compat s t
           → Id ≃ Id
@@ -197,7 +220,7 @@ compat-∪≃ s t c =
                                                else x))
                         ＝ x}
              (λ x∈t →
-                   given-no aux {s = s} {t = t} c x∈t x∉s
+                   given-no contra (compat-∈-← {s = s} {t = t} c) x∉s
                      return (λ q → (if ⌊ q ⌋
                                then s .eqvr $ (t .eqvr ⁻¹ $ x)
                                else if (t .eqvr ⁻¹ $ x) ∈ₛ? t .supr
@@ -259,7 +282,7 @@ compat-∪≃ s t c =
            given-yes ren-sup→ {r = s} x∈s
                    return (λ q → (if ⌊ q ⌋
                                      then s .eqvr ⁻¹ $ (s .eqvr $ x)
-                                    else if (s .eqvr $ x) ∈ₛ? t .supr
+                                     else if (s .eqvr $ x) ∈ₛ? t .supr
                                           then t .eqvr ⁻¹ $ (s .eqvr $ x)
                                           else (s .eqvr $ x))
                                  ＝ x)
@@ -283,7 +306,7 @@ compat-∪≃ s t c =
                                                else x))
                         ＝ x}
              (λ x∈t →
-                   given-no aux1 {s = s} {t = t} c x∈t x∉s
+                   given-no contra (compat-∈-→ {s = s} {t = t} c) x∉s
                       return (λ q → (if ⌊ q ⌋
                                then s .eqvr ⁻¹ $ (t .eqvr $ x)
                                else if (t .eqvr $ x) ∈ₛ? t .supr

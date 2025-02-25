@@ -22,6 +22,8 @@ open import LFSet.Discrete
 
 open import Nominal.Term
 open import Nominal.Cofinite.Base
+open import Nominal.Cofinite.Ren
+open import Nominal.Cofinite.Ren.Quasi
 
 -- (idempotent) substitution as a cofinitely quantified map
 -- (dom overapproximates the actual domain)
@@ -58,7 +60,7 @@ s $↦ con       = con
 id↦ : Sub
 id↦ .fun = ``_
 id↦ .dom = []
-id↦ .cof _  = refl
+id↦ .cof _ = refl
 
 -- composition
 _◇_ : Sub → Sub → Sub
@@ -82,22 +84,6 @@ thin : LFSet Id → Sub → Sub
 thin xs s .fun = s .fun
 thin xs s .dom = xs ∪∷ s .dom
 thin xs s .cof x∉ = s .cof (∉ₛ-∪∷ {xs = xs} x∉ .snd)
-
--- strengthening the domain
-restrict : LFSet Id → Sub → Sub
-restrict xs s .fun x = if x ∈ₛ? xs then s .fun x else `` x
-restrict xs s .dom = filterₛ (_∈ₛ? xs) (s .dom)
-restrict xs s .cof {x} x∉ =
-  [ (λ sn   →
-     given-no the (x ∉ xs) (so→false! sn)
-        return (λ q → (if ⌊ q ⌋ then s .fun x else (`` x)) ＝ (`` x))
-        then refl)
-  , (λ x∉′ → Dec.elim
-                {C = λ q → (if ⌊ q ⌋ then s .fun x else (`` x)) ＝ (`` x)}
-                (λ _ → s .cof x∉′)
-                (λ _ → refl)
-                (x ∈? xs) )
-  ]ᵤ (filter-∉ x∉)
 
 -- range
 range : Sub → LFSet Id
@@ -187,17 +173,6 @@ thin-◇-l {xs} {f} {g} =
 thin-◇-r : ∀ {xs f g} → f ◇ thin xs g ＝ thin xs (f ◇ g)
 thin-◇-r {xs} = sub-ext refl (∪∷-assoc xs ⁻¹)
 
-restrict-$↦ : ∀ {f t xs}
-            → vars t ⊆ xs
-            → restrict xs f $↦ t ＝ f $↦ t
-restrict-$↦ {f} {t = `` x}    sub =
-  ap (λ q → (if q then (f $ x) else (`` x)))
-     (so≃is-true $ true→so! (sub (hereₛ refl)))
-restrict-$↦ {t = p ⟶ q} {xs} sub =
-  ap² _⟶_ (restrict-$↦ {t = p} {xs = xs} λ {x} → sub {x} ∘ ∈ₛ-∪∷←l)
-            (restrict-$↦ {t = q} {xs = xs} λ {x} → sub {x} ∘ ∈ₛ-∪∷←r {s₁ = vars p})
-restrict-$↦ {t = con}         _   = refl
-
 vars-eq : ∀ {s s′ t}
         → ({x : Id} → x ∈ vars t → (s $ x) ＝ (s′ $ x))
         → (s $↦ t) ＝ (s′ $↦ t)
@@ -207,6 +182,18 @@ vars-eq {s} {s′} {t = p ⟶ q} eq =
     (vars-eq {t = p} (eq ∘ ∈ₛ-∪∷←l))
     (vars-eq {t = q} (eq ∘ ∈ₛ-∪∷←r {s₁ = vars p}))
 vars-eq {s} {s′} {t = con}    eq = refl
+
+eq-vars : ∀ {s s′ t}
+        → (s $↦ t) ＝ (s′ $↦ t)
+        → {x : Id} → x ∈ vars t → (s $ x) ＝ (s′ $ x)
+eq-vars {s} {s′} {t = `` y}   e {x} x∈ =
+  let x=y = ∈ₛ∷-∉ x∈ ∉ₛ[] in
+  ap (s $_) x=y ∙ e ∙ ap (s′ $_) (x=y ⁻¹)
+eq-vars {t = p ⟶ q} e {x} x∈ =
+  let (ep , eq) = ⟶-inj e in
+  [ (eq-vars {t = p} ep {x = x})
+  , (eq-vars {t = q} eq {x = x})
+  ]ᵤ (∈ₛ-∪∷→ {xs = vars p} {ys = vars q} x∈)
 
 range-eq : ∀ {s s′ t}
          → ({x : Id} → x ∈ range t → (s $ x) ＝ (s′ $ x))
@@ -356,6 +343,7 @@ wf-sub-idem {s} w =
     ∪∷-idem
 
 -- "order" on terms
+-- TODO should be flipped?
 
 _≤t_ : Term → Term → 𝒰
 t ≤t s =
@@ -371,7 +359,8 @@ t ≤t s =
   , sub-◇ {t = q} ∙ ap (f $↦_) ge ∙ fe
 
 -- thinned "order" on substitutions
--- these are actually categories, not orders
+-- TODO should be flipped?
+-- TODO these are actually categories, not orders
 -- to get propositionality one should truncate
 
 _≤↦_ : Sub → Sub → 𝒰
@@ -439,3 +428,151 @@ optimist-lemma {q} {a} {f} {g} dc (pfa , pmax) tq (qgfa , qmax) =
                qmax j $
                subst q (thin-◇-l {xs = w} {g = a} ⁻¹ ∙ ap (_◇ a) (ea ⁻¹) ∙ ◇-assoc {g = f} {h = a}) $
                tq (f′ ◇ a) w qfa)
+
+-- interaction of renaming and substitution
+
+ren→sub : Ren → Sub
+ren→sub r .fun = ``_ ∘ (r .eqvr $_)
+ren→sub r .dom = r .supr
+ren→sub r .cof {x} x∉ = ap ``_ (r .cofr x∉)
+
+ren-ids : ren→sub id-ren ＝ id↦
+ren-ids = sub-ext (fun-ext λ x → refl) refl
+
+ren-id : ∀ {t}
+       → (ren→sub id-ren $↦ t) ＝ t
+ren-id {t} = ap (_$↦ t) ren-ids ∙ sub-id
+
+ren-term-inv : ∀ {s t r}
+             → (ren→sub r $↦ s) ＝ t
+             → (ren→sub (flp r) $↦ t) ＝ s
+ren-term-inv {s = `` xs}     {t = `` xt}     {r} rst =
+    ap ``_ (  ap (r .eqvr ⁻¹ $_) (``-inj rst ⁻¹)
+            ∙ is-equiv→unit (r .eqvr .snd) xs) -- TODO ∙-inv-i or whatever
+ren-term-inv {s = ps ⟶ qs} {t = `` xt}         rst = false! rst
+ren-term-inv {s = con}       {t = `` xt}         rst = false! rst
+ren-term-inv {s = `` xs}     {t = pt ⟶ qt}     rst = false! rst
+ren-term-inv {s = ps ⟶ qs} {t = pt ⟶ qt}  {r} rst =
+  let (pe , qe) = ⟶-inj rst in
+  ap² _⟶_ (ren-term-inv {r = r} pe) (ren-term-inv {r = r} qe)
+ren-term-inv {s = con}       {t = pt ⟶ qt}     rst = false! rst
+ren-term-inv {s = `` x}      {t = con}           rst = false! rst
+ren-term-inv {s = ps ⟶ qs} {t = con}           rst = false! rst
+ren-term-inv {s = con}       {t = con}           rst = refl
+
+◇-◇↔ : ∀ {f g}
+      → ren→sub (f ◇↔ g) ＝ (ren→sub f ◇ ren→sub g)
+◇-◇↔ = sub-ext (fun-ext λ x → refl) refl
+
+ren-◇↔ : ∀ {f g t} → ren→sub (f ◇↔ g) $↦ t ＝ ren→sub f $↦ (ren→sub g $↦ t)
+ren-◇↔ {f} {g} {t} = ap (_$↦ t) (◇-◇↔ {f = f} {g = g}) ∙ sub-◇ {s1 = ren→sub f} {s2 = ren→sub g} {t = t}
+
+-- alpha-equivalence on terms
+
+_~α_ : Term → Term → 𝒰
+s ~α t = Σ[ r ꞉ Ren ] ((ren→sub r $↦ s) ＝ t)
+
+~α-refl : ∀ {t} → t ~α t
+~α-refl = id-ren , ren-id
+
+~α-sym : ∀ {s t} → s ~α t → t ~α s
+~α-sym (r , e) = (flp r) , (ren-term-inv {r = r} e)
+
+~α-trans : ∀ {r s t} → r ~α s → s ~α t → r ~α t
+~α-trans {r} {t} (rs , rse) (st , ste) =
+    (st ◇↔ rs)
+  ,   ren-◇↔ {f = st} {g = rs} {t = r}
+    ∙ ap (ren→sub st $↦_) rse
+    ∙ ste
+
+-- antisymmetry on terms
+
+eqv-qren : ∀ {s t f g}
+         → (f $↦ s) ＝ t
+         → (g $↦ t) ＝ s
+         → Σ[ q ꞉ QRen ] (  (q .fdom ＝ vars s)
+                          × (q .bdom ＝ vars t)
+                          × ((z : Id) → z ∈ vars s → (f $ z) ＝ `` q .fwd z)
+                          × ((z : Id) → z ∈ vars t → (g $ z) ＝ `` q .bwd z))
+eqv-qren {s = `` sx}     {t = `` tx} {f} {g} ef eg =
+    (sx ↔Q tx)
+  , refl
+  , refl
+  , (λ z z∈ →
+      let z=sx = ∈ₛ∷-∉ z∈ ∉ₛ[] in
+      given-yes z=sx
+        return (λ q → (f $ z) ＝ (`` (if ⌊ q ⌋ then tx else z)))
+        then (ap (f $_) z=sx ∙ ef))
+  , λ z z∈ →
+      let z=tx = ∈ₛ∷-∉ z∈ ∉ₛ[] in
+      given-yes z=tx
+        return (λ q → (g $ z) ＝ (`` (if ⌊ q ⌋ then sx else z)))
+        then (ap (g $_) z=tx ∙ eg)
+eqv-qren {s = `` sx}     {t = pt ⟶ qt} ef eg = false! eg
+eqv-qren {s = `` sx}     {t = con}       ef eg = false! eg
+eqv-qren {s = ps ⟶ qs} {t = `` tx}     ef eg = false! ef
+eqv-qren {s = ps ⟶ qs} {t = pt ⟶ qt} {f} {g} ef eg =
+  let (egp , egq) = ⟶-inj eg
+      (efp , efq) = ⟶-inj ef
+      (qrp , pfv , pbv , pf , pb) = eqv-qren efp egp
+      (qrq , qfv , qbv , qf , qb) = eqv-qren efq egq
+      qc : qcompat qrp qrq
+      qc =  (λ z z∈pf z∈qf →
+               ``-inj (pf z (subst (z ∈_) pfv z∈pf) ⁻¹ ∙ qf z (subst (z ∈_) qfv z∈qf)))
+          , (λ z z∈pb z∈qb →
+               ``-inj (pb z (subst (z ∈_) pbv z∈pb) ⁻¹ ∙ qb z (subst (z ∈_) qbv z∈qb)))
+   in
+    ∪Q qrp qrq qc
+  , ap² _∪∷_ pfv qfv
+  , ap² _∪∷_ pbv qbv
+  , (λ z z∈ →
+       Dec.elim
+          {C = λ q → (f $ z) ＝  (`` (if ⌊ q ⌋ then qrp .fwd z
+                                      else if z ∈ₛ? qrq .fdom then qrq .fwd z
+                                      else z))}
+          (λ z∈rp → pf z (subst (z ∈_) pfv z∈rp))
+          (λ z∉rp →
+             Dec.elim
+               {C = λ q → (f $ z) ＝  (`` (if ⌊ q ⌋ then qrq .fwd z else z))}
+               (λ z∈rq → qf z (subst (z ∈_) qfv z∈rq))
+               (λ z∉rq → absurd (∪∷-∉ₛ
+                                    (subst (z ∉_) pfv z∉rp)
+                                    (subst (z ∉_) qfv z∉rq)
+                                    z∈))
+               (z ∈? qrq .fdom))
+          (z ∈? qrp .fdom))
+  ,  λ z z∈ →
+       Dec.elim
+          {C = λ q → (g $ z) ＝  (`` (if ⌊ q ⌋ then qrp .bwd z
+                                      else if z ∈ₛ? qrq .bdom then qrq .bwd z
+                                      else z))}
+          (λ z∈rp → pb z (subst (z ∈_) pbv z∈rp))
+          (λ z∉rp →
+             Dec.elim
+               {C = λ q → (g $ z) ＝  (`` (if ⌊ q ⌋ then qrq .bwd z else z))}
+               (λ z∈rq → qb z (subst (z ∈_) qbv z∈rq))
+               (λ z∉rq → absurd (∪∷-∉ₛ
+                                    (subst (z ∉_) pbv z∉rp)
+                                    (subst (z ∉_) qbv z∉rq)
+                                    z∈))
+               (z ∈? qrq .bdom))
+          (z ∈? qrp .bdom)
+eqv-qren {s = ps ⟶ qs} {t = con}       ef eg = false! eg
+eqv-qren {s = con}       {t = `` tx}     ef eg = false! ef
+eqv-qren {s = con}       {t = pt ⟶ qt} ef eg = false! ef
+eqv-qren {s = con}       {t = con}       ef eg =
+    id-qren
+  , refl
+  , refl
+  , (λ z  → false! ⦃ Refl-x∉ₛ[] ⦄)
+  , λ z  → false! ⦃ Refl-x∉ₛ[] ⦄
+
+≤t-anti-α : ∀ {t s}
+          → t ≤t s → s ≤t t → t ~α s
+≤t-anti-α {t} {s} (f , fs) (g , gt) =
+  let (qr , vs , vt , es , et) = eqv-qren fs gt in
+  (flp (complete qr)) ,
+   (  vars-eq {s = ren→sub (flp (complete qr))} {s′ = g} {t = t}
+        (λ {x} x∈ →   ap ``_ (if-true (true→so! (subst (x ∈_) (vt ⁻¹) x∈)))
+                     ∙ et x x∈ ⁻¹)
+    ∙ gt)

@@ -8,7 +8,7 @@ open import Data.Empty hiding (_≠_ ; elim ; rec)
 open import Data.Dec as Dec hiding (elim ; rec)
 open import Data.Reflects as Reflects
 open import Data.Bool as Bool hiding (elim ; rec)
-open import Data.Sum
+open import Data.Sum hiding (elim)
 open import Data.Nat hiding (elim ; rec)
 open import Data.Nat.Two
 open import Data.List as List hiding (elim ; rec ; empty? ; drop)

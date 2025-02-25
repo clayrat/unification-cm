@@ -9,7 +9,7 @@ open import Data.Empty hiding (_≠_ ; elim ; rec)
 open import Data.Dec as Dec hiding (elim ; rec)
 open import Data.Reflects as Reflects
 open import Data.Bool as Bool hiding (elim ; rec)
-open import Data.Sum
+open import Data.Sum as Sum
 open import Data.Nat hiding (elim ; rec)
 open import Data.Nat.Order.Base
 open import Data.Nat.Two
@@ -116,9 +116,11 @@ list-∈ {xs = x ∷ xs}  x∈ =
   , (λ z∈ → there (list-∈ z∈))
   ]ᵤ (∈ₛ-∷→ x∈)
 
+-- TODO these should also work for non-discrete A
+-- but P x under Reflects has to be Erased
+
 opaque
   unfolding allₛ
-  -- TODO this would also work for non-discrete A but P x under Reflects has to be Erased
   -- TODO factor out allₛ-×≃ : ((z : A) → z ∈ (x ∷ s) → P z) ≃ P x × ((z : A) → z ∈ s → P z)
   Reflects-allₛ : ⦃ d : is-discrete A ⦄
                → {s : LFSet A} {P : A → 𝒰 ℓ′} {p : A → Bool}
@@ -137,6 +139,44 @@ opaque
         (Reflects-× ⦃ rp = rp x ⦄ ⦃ rq = ih ⦄)
     go .truncʳ q =
       reflects-is-of-hlevel 0 $ Π-is-of-hlevel 1 (fun-is-of-hlevel 1 ∘ pp)
+
+  Dec-allₛ
+    : ⦃ d : is-discrete A ⦄
+    → {P : A → 𝒰 ℓ′} {s : LFSet A}
+    → (∀ x → is-prop (P x))
+    → (∀ x → Dec (P x))
+    → Dec ((x : A) → x ∈ s → P x)
+  Dec-allₛ {s} pp pd .does  = allₛ (λ x → pd x .does) s
+  Dec-allₛ     pp pd .proof = Reflects-allₛ pp λ x → pd x .proof
+
+opaque
+  unfolding anyₛ
+  -- TODO factor out any-⊎≃
+  Reflects-anyₛ : {A : 𝒰 ℓ} ⦃ d : is-discrete A ⦄
+               → {s : LFSet A} {P : A → 𝒰 ℓ′} {p : A → Bool}
+               → (∀ x → Reflects (P x) (p x))
+               → Reflects (∃[ x ꞉ A ] x ∈ s × P x) (anyₛ p s)
+  Reflects-anyₛ {A} {s} {P} {p} rp = elim-prop go s
+    where
+    go : Elim-prop λ q → Reflects (∃[ x ꞉ A ] x ∈ q × P x) (anyₛ p q)
+    go .[]ʳ = ofⁿ (rec! λ x x∈ _ → false! ⦃ Refl-x∉ₛ[] ⦄ x∈)
+    go .∷ʳ x {xs} ih =
+      Reflects.dmap
+        [ (λ px → ∣ x , hereₛ refl , px ∣₁)
+        , map (λ where (y , y∈ , py) → y , thereₛ y∈ , py) ]ᵤ
+        (λ ¬x⊎xs → rec! λ y y∈ py → ¬x⊎xs (Sum.dmap (λ y=x → subst P y=x py)
+                                                     (λ y∈′ → ∣ y , y∈′ , py ∣₁)
+                                                     (∈ₛ-∷→ y∈)))
+        (Reflects-⊎ ⦃ rp = rp x ⦄ ⦃ rq = ih ⦄)
+    go .truncʳ q = hlevel!
+
+  Dec-anyₛ
+    : {A : 𝒰 ℓ} ⦃ d : is-discrete A ⦄
+    → {P : A → 𝒰 ℓ′} {s : LFSet A}
+    → (∀ x → Dec (P x))
+    → Dec (∃[ x ꞉ A ] x ∈ s × P x)
+  Dec-anyₛ {s} pd .does  = anyₛ (λ x → pd x .does) s
+  Dec-anyₛ     pd .proof = Reflects-anyₛ λ x → pd x .proof
 
 opaque
   unfolding filterₛ

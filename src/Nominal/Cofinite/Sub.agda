@@ -85,9 +85,17 @@ thin xs s .fun = s .fun
 thin xs s .dom = xs ∪∷ s .dom
 thin xs s .cof x∉ = s .cof (∉ₛ-∪∷ {xs = xs} x∉ .snd)
 
+-- graph
+graph : Sub → LFSet (Id × Term)
+graph s = mapₛ (λ x → x , s .fun x) (s .dom)
+
+-- codom
+codom : Sub → LFSet Term
+codom s = mapₛ (s .fun) (s .dom)
+
 -- range
-range : Sub → LFSet Id
-range s = bindₛ (λ x → vars (s $ x)) (s .dom)
+-- range : Sub → LFSet Id
+-- range s = bindₛ (λ x → vars (s $ x)) (s .dom)
 
 -- interaction lemmas
 
@@ -195,22 +203,39 @@ eq-vars {t = p ⟶ q} e {x} x∈ =
   , (eq-vars {t = q} eq {x = x})
   ]ᵤ (∈ₛ-∪∷→ {xs = vars p} {ys = vars q} x∈)
 
-range-eq : ∀ {s s′ t}
-         → ({x : Id} → x ∈ range t → (s $ x) ＝ (s′ $ x))
-         → ({x : Id} → x ∉ dom t → (s $ x) ＝ (s′ $ x))
-         → thin (dom s′) (s ◇ t) ＝ thin (dom s) (s′ ◇ t)
-range-eq {s} {s′} {t} er end =
-  sub-ext
-    (fun-ext λ q → Dec.elim
-                     {C = λ _ → (s $↦ fun t q) ＝ (s′ $↦ fun t q)}
-                     (λ q∈ → vars-eq {t = t $ q} (er ∘ ∈-bind q∈))
-                     (λ q∉ → ap (s $↦_) (t .cof q∉) ∙ end q∉ ∙ ap (s′ $↦_) (t .cof q∉ ⁻¹))
-                     (q ∈? dom t))
-    (  ap (dom s′ ∪∷_) (∪∷-comm {x = t .dom})
-     ∙ ∪∷-assoc {y = s .dom} (dom s′)
-     ∙ ap (_∪∷ dom t) (∪∷-comm {x = s′ .dom})
-     ∙ ∪∷-assoc {y = s′ .dom} (dom s) ⁻¹
-     ∙ ap (dom s ∪∷_) (∪∷-comm {x = s′ .dom}))
+∈-graph : ∀ {x : Id} {t : Term} {s : Sub}
+         → (x , t) ∈ graph s → x ∈ s .dom × t ∈ codom s
+∈-graph {x} {t} {s} xt∈ =
+  rec!
+    (λ z z∈ xte →
+        let (xe , te) = ×-path-inv xte in
+          subst (_∈ s .dom) (xe ⁻¹) z∈
+        , subst (_∈ₛ codom s) (te ⁻¹) (∈-mapₛ z∈))
+    (mapₛ-∈ xt∈)
+
+∈-graph-= : ∀ {x : Id} {t : Term} {s : Sub}
+           → (x , t) ∈ graph s → t ＝ s # x
+∈-graph-= {s} xt∈ =
+  rec!
+    (λ z z∈ xte →
+        let (xe , te) = ×-path-inv xte in
+        te ∙ ap (s .fun) (xe ⁻¹))
+    (mapₛ-∈ xt∈)
+
+∈-dom-graph : ∀ {x : Id} {s : Sub}
+             → x ∈ dom s → (x , s # x) ∈ graph s
+∈-dom-graph = ∈-mapₛ
+
+∈-codom-graph : ∀ {t : Term} {s : Sub}
+              → t ∈ codom s → ∃[ x ꞉ Id ] (x , t) ∈ graph s
+∈-codom-graph {s} t∈ =
+  rec!
+    (λ z z∈ xte →
+        ∣ z
+        , subst (λ q → (z , q) ∈ₛ graph s) (xte ⁻¹)
+                (∈-mapₛ z∈)
+        ∣₁)
+    (mapₛ-∈ t∈)
 
 -- substitution on contexts
 

@@ -12,6 +12,15 @@ open import Data.Sum hiding (elim)
 open import Data.Nat hiding (elim ; rec)
 open import Data.Nat.Two
 open import Data.List as List hiding (elim ; rec ; empty? ; drop)
+open import Data.Maybe as Maybe hiding (elim ; rec)
+
+open import Order.Base
+open import Order.Diagram.Bottom
+open import Order.Diagram.Top
+open import Order.Diagram.Join
+open import Order.Diagram.Meet
+open import Order.Semilattice.Join
+open import Order.Semilattice.Meet
 
 private variable
   ℓ ℓ′ ℓ″ : Level
@@ -238,6 +247,9 @@ opaque
     ... | true = swap
     go .truncʳ = trunc
 
+  filter-[] : {p : A → Bool} → filterₛ p [] ＝ []
+  filter-[] = refl
+
   filter-idem : ∀ {s} {p : A → Bool}
               → filterₛ p (filterₛ p s) ＝ filterₛ p s
   filter-idem {s} {p} = elim-prop go s
@@ -352,6 +364,9 @@ opaque
       go .swapʳ x y xs ys = swap
       go .truncʳ = hlevel!
 
+  mapₛ-[] : {f : A → B} → mapₛ f [] ＝ []
+  mapₛ-[] = refl
+
 opaque
   bindₛ : (A → LFSet B) → LFSet A → LFSet B
   bindₛ {A} {B} f = rec go
@@ -362,6 +377,32 @@ opaque
       go .dropʳ x xs ys = ∪∷-assoc (f x) ∙ ap (_∪∷ ys) (∪∷-idem {x = f x})
       go .swapʳ x y xs ys = ∪∷-assoc {y = f y} (f x) ∙ ap (_∪∷ ys) (∪∷-comm {x = f x}) ∙ ∪∷-assoc (f y) ⁻¹
       go .truncʳ = hlevel!
+
+opaque
+  joinₛ : {o ℓ : Level} {A : Poset o ℓ} {js : is-join-semilattice A}
+        → LFSet (Poset.Ob A) → Poset.Ob A
+  joinₛ {A} {js} = rec go
+    where
+      open is-join-semilattice js
+      go : Rec (Poset.Ob A) (Poset.Ob A)
+      go .[]ʳ = ⊥
+      go .∷ʳ x xs r = x ∪ r
+      go .dropʳ x y r = ∪-assoc ∙ ap (_∪ r) ∪-idem
+      go .swapʳ x y xs r = ∪-assoc ∙ ap (_∪ r) ∪-comm ∙ ∪-assoc ⁻¹
+      go .truncʳ = Poset.ob-is-set A
+
+opaque
+  meetₛ : {o ℓ : Level} {A : Poset o ℓ} {ms : is-meet-semilattice A}
+        → LFSet (Poset.Ob A) → Poset.Ob A
+  meetₛ {A} {ms} = rec go
+    where
+      open is-meet-semilattice ms
+      go : Rec (Poset.Ob A) (Poset.Ob A)
+      go .[]ʳ = ⊤
+      go .∷ʳ x xs r = x ∩ r
+      go .dropʳ x y r = ∩-assoc ∙ ap (_∩ r) ∩-idem
+      go .swapʳ x y xs r = ∩-assoc ∙ ap (_∩ r) ∩-comm ∙ ∩-assoc ⁻¹
+      go .truncʳ = Poset.ob-is-set A
 
 from-list : List A → LFSet A
 from-list = List.rec [] _∷_

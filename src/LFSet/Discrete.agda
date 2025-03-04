@@ -13,11 +13,16 @@ open import Data.Sum as Sum
 open import Data.Nat hiding (elim ; rec)
 open import Data.Nat.Order.Base
 open import Data.Nat.Two
+open import Data.Maybe hiding (elim ; rec)
 
-open import Data.List hiding (elim ; rec ; drop)
+open import Data.List hiding (elim ; rec ; drop ; empty?)
 open import Data.List.Correspondences.Unary.Unique
 open import Data.List.Correspondences.Unary.Any
 open import Data.List.Membership
+
+open import Order.Base
+open import Order.Semilattice.Join
+open import Order.Semilattice.Meet
 
 open import LFSet
 open import LFSet.Membership
@@ -209,9 +214,17 @@ opaque
   rem : ⦃ is-discrete A ⦄ → A → LFSet A → LFSet A
   rem x = filterₛ (not ∘ x =?_)
 
+  rem-[] : ⦃ d : is-discrete A ⦄ → {x : A}
+         → rem x [] ＝ []
+  rem-[] = refl
+
   rem-⊆ : ⦃ d : is-discrete A ⦄ → {x : A} {s : LFSet A}
-         → rem ⦃ d ⦄ x s ⊆ s
+         → rem x s ⊆ s
   rem-⊆ = filter-⊆
+
+  rem-∷ : ⦃ d : is-discrete A ⦄ → {x y : A} {s : LFSet A}
+         → rem x (y ∷ s) ＝ (if x =? y then rem x s else y ∷ rem x s)
+  rem-∷ {x} {y} = if-swap {b = x =? y} ⁻¹
 
   -- TODO generalize to filter?
   rem-∉-eq : ⦃ d : is-discrete A ⦄ {s : LFSet A} {z : A}
@@ -248,7 +261,7 @@ opaque
 
   rem-∈-≠ : ⦃ d : is-discrete A ⦄ {z x : A} {s : LFSet A}
            → z ≠ x → z ∈ₛ s → z ∈ₛ rem x s
-  rem-∈-≠ z≠x = ∈-filter (false→so! (z≠x ∘ _⁻¹))
+  rem-∈-≠ z≠x = ∈-filterₛ (false→so! (z≠x ∘ _⁻¹))
 
 -- lfset extensionality
 -- TODO can we implement an erased variant for non-discrete A ?
@@ -339,7 +352,7 @@ opaque
            → z ∈ xs
            → z ∉ ys
            → z ∈ minus xs ys
-  ∈-minus z∈xs z∉ys = ∈-filter (false→so! z∉ys) z∈xs
+  ∈-minus z∈xs z∉ys = ∈-filterₛ (false→so! z∉ys) z∈xs
 
   minus-minus : ⦃ d : is-discrete A ⦄ {v s₁ s₂ : LFSet A}
               → minus (minus v s₁) s₂ ＝ minus v (s₁ ∪∷ s₂)
@@ -363,7 +376,7 @@ opaque
 
   ∈-∩∷ : ⦃ d : is-discrete A ⦄ → {s t : LFSet A} {x : A}
         → x ∈ s → x ∈ t → x ∈ (s ∩∷ t)
-  ∈-∩∷ x∈s x∈t = ∈-filter (true→so! x∈t) x∈s
+  ∈-∩∷ x∈s x∈t = ∈-filterₛ (true→so! x∈t) x∈s
 
   ∩∷-zero-l : ⦃ d : is-discrete A ⦄ → {xs : LFSet A} → [] ∩∷ xs ＝ []
   ∩∷-zero-l = refl
@@ -412,7 +425,7 @@ calc-filter= {p} {x} {xs} px with Dec-∈ₛ {a = x} {xs = filterₛ p xs}
                  ∙ (so≃is-true $ true→so! $ filter-⊆ x∈f) ⁻¹)
 ... | no x∉f =
   ap (bit ∘ not) (  (¬so≃is-false $ so-not $ false→so! x∉f)
-                  ∙ (¬so≃is-false $ so-not $ false→so! (contra (∈-filter px) x∉f)) ⁻¹)
+                  ∙ (¬so≃is-false $ so-not $ false→so! (contra (∈-filterₛ px) x∉f)) ⁻¹)
 
 opaque
   sizeₛ : ⦃ d : is-discrete A ⦄ → LFSet A → ℕ
@@ -431,7 +444,7 @@ opaque
       Dec.elim
         {C = λ q → bit (not (⌊ q ⌋ or x ∈ₛ? xs)) + (calc y xs + n) ＝ calc y (x ∷ xs) + (calc x xs + n)}
         (λ x=y → given-yes_return_then_
-                     ⦃ A-pr = hlevel-instance (is-discrete→is-set d y x) ⦄
+                     ⦃ A-pr = hlevel-instance (is-discrete→is-set d y x) ⦄  -- TODO
                      (x=y ⁻¹)
                      (λ q → calc y xs + n ＝ bit (not (⌊ q ⌋ or y ∈ₛ? xs)) + (calc x xs + n))
                      (ap (λ q → calc q xs + n) (x=y ⁻¹)))
@@ -538,6 +551,27 @@ opaque
       z∈
 
 opaque
+  unfolding mapₛ
+
+  -- to get rid of truncation, we'd have to guarantee that x is uniquely determined by z
+  mapₛ-∈ : {A : 𝒰 ℓ} {B : 𝒰 ℓ′} -- why
+         → ⦃ dB : is-discrete B ⦄
+         → {f : A → B} {s : LFSet A} {z : B}
+         → z ∈ mapₛ f s
+         → ∃[ x ꞉ A ] ((x ∈ₛ s) × (z ＝ f x))
+  mapₛ-∈ {A} {B} {f} {s} {z} = elim-prop go s
+    where
+    go : Elim-prop λ q → z ∈ mapₛ f q → ∃[ x ꞉ A ] ((x ∈ₛ q) × (z ＝ f x))
+    go .[]ʳ = false! ⦃ Refl-x∉ₛ[] ⦄
+    go .∷ʳ x {xs} ih x∈∷ =
+       [ (λ z=fx → ∣ x , hereₛ refl , z=fx ∣₁)
+       , (λ z∈fxs →
+             map (λ where (q , xq , zq) → q , thereₛ xq , zq)
+                 (ih z∈fxs))
+       ]ᵤ (∈ₛ-∷→ x∈∷)
+    go .truncʳ x = hlevel!
+
+opaque
   unfolding bindₛ
 
   -- to get rid of truncation, we'd have to guarantee that x is uniquely determined by z
@@ -557,3 +591,75 @@ opaque
                (ih z∈fxs))
       ]ᵤ (∈ₛ-∪∷→ {xs = f x} x∈∷)
     go .truncʳ x = hlevel!
+
+opaque
+  unfolding joinₛ
+
+  joinₛ-∈-≤ : {o ℓ : Level} {A : Poset o ℓ} {js : is-join-semilattice A}
+              ⦃ d : is-discrete (Poset.Ob A) ⦄
+            → {z : Poset.Ob A} {xs : LFSet (Poset.Ob A)}
+            → z ∈ xs → Poset._≤_ A z (joinₛ {js = js} xs)
+  joinₛ-∈-≤ {A} {js} {z} {xs} = elim-prop go xs
+    where
+      open Poset A renaming (_≤_ to _≤ₐ_; =→≤ to =→≤ₐ)
+      open is-join-semilattice js
+      go : Elim-prop λ q → z ∈ q → z ≤ₐ joinₛ {js = js} q
+      go .[]ʳ = false! ⦃ Refl-x∉ₛ[] ⦄
+      go .∷ʳ x ih z∈∷ =
+        ≤⊎→∪ $
+        Sum.dmap =→≤ₐ ih $
+        ∈ₛ-∷→ z∈∷
+      go .truncʳ = hlevel!
+
+opaque
+  unfolding meetₛ
+
+  meetₛ-∈-≤ : {o ℓ : Level} {A : Poset o ℓ} {ms : is-meet-semilattice A}
+              ⦃ d : is-discrete (Poset.Ob A) ⦄
+            → {z : Poset.Ob A} {xs : LFSet (Poset.Ob A)}
+            → z ∈ xs → Poset._≤_ A (meetₛ {ms = ms} xs) z
+  meetₛ-∈-≤ {A} {ms} {z} {xs} = elim-prop go xs
+    where
+      open Poset A renaming (_≤_ to _≤ₐ_; =→≤ to =→≤ₐ)
+      open is-meet-semilattice ms
+      go : Elim-prop λ q → z ∈ q → meetₛ {ms = ms} q ≤ₐ z
+      go .[]ʳ = false! ⦃ Refl-x∉ₛ[] ⦄
+      go .∷ʳ x ih z∈∷ =
+        ≤⊎→∩ $
+        Sum.dmap (=→≤ₐ ∘ _⁻¹) ih $
+        ∈ₛ-∷→ z∈∷
+      go .truncʳ = hlevel!
+
+opaque
+  -- extract the element if the set is a singleton
+
+  extract1 : ⦃ d : is-discrete A ⦄ → LFSet A → Maybe A
+  extract1 {A} ⦃ d ⦄ = rec go
+    where
+      go : Rec A (Maybe A)
+      go .[]ʳ = nothing
+      go .∷ʳ x xs _ = if empty? (rem x xs) then just x else nothing
+      go .dropʳ x xs _ =
+        ap (λ q → if empty? q then just x else nothing) $
+        rem-∷ ∙ (given-yes_return_then_ ⦃ A-pr = hlevel-instance (is-discrete→is-set d x x) ⦄  -- TODO
+                   refl (λ q → (if ⌊ q ⌋ then rem x xs else x ∷ rem x xs) ＝ rem x xs) refl)
+      go .swapʳ x y xs _ =
+          ap (λ q → if empty? q then just x else nothing) rem-∷
+        ∙ Dec.elim
+             {C = λ q → (if empty? (if ⌊ q ⌋ then rem x xs else y ∷ rem x xs) then just x else nothing)
+                        ＝
+                        (if empty? (if ⌊ q ⌋ then rem y xs else x ∷ rem y xs) then just y else nothing)}
+             (λ x=y → ap (λ q → if empty? (rem q xs) then just q else nothing) x=y)
+             (λ _ → refl)
+             (x ≟ y)
+        ∙ ap (λ q → if empty? (if q then rem y xs else x ∷ rem y xs) then just y else nothing)
+             (=?-sym {x = x})
+        ∙ ap (λ q → if empty? q then just y else nothing)
+             (rem-∷ ⁻¹)
+      go .truncʳ = maybe-is-of-hlevel 0 $ is-discrete→is-set d
+
+  extract1-[] : ⦃ d : is-discrete A ⦄ → extract1 (the (LFSet A) []) ＝ nothing
+  extract1-[] = refl
+
+  extract1-x∷ : ⦃ d : is-discrete A ⦄ → {x : A} → extract1 (x ∷ []) ＝ just x
+  extract1-x∷ {x} = ap (λ q → if empty? q then just x else nothing) rem-[]

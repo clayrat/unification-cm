@@ -9,7 +9,7 @@ open import Data.Empty hiding (_≠_ ; elim ; rec)
 open import Data.Dec as Dec hiding (elim ; rec)
 open import Data.Reflects as Reflects
 open import Data.Bool as Bool hiding (elim ; rec)
-open import Data.Sum
+open import Data.Sum as Sum
 open import Data.Nat hiding (elim ; rec)
 open import Data.Nat.Order.Base
 open import Data.Nat.Two
@@ -17,6 +17,10 @@ open import Data.Nat.Two
 open import Data.List hiding ([] ; rec ; drop)
 open import Data.List.Correspondences.Unary.Any
 open import Data.List.Membership
+
+open import Order.Base
+open import Order.Semilattice.Join
+open import Order.Semilattice.Meet
 
 open import LFSet
 
@@ -235,10 +239,10 @@ unconsₛ {z} {x} {xs} {B} bp f g z∈∷ =
 
 opaque
   unfolding filterₛ
-  ∈-filter : {p : A → Bool} {s : LFSet A} {z : A}
+  ∈-filterₛ : {p : A → Bool} {s : LFSet A} {z : A}
             → ⌞ p z ⌟ → z ∈ s
             → z ∈ filterₛ p s
-  ∈-filter {p} {s} {z} pz = elim-prop go s
+  ∈-filterₛ {p} {s} {z} pz = elim-prop go s
     where
     go : Elim-prop λ q → z ∈ q → z ∈ filterₛ p q
     go .[]ʳ = id
@@ -285,7 +289,7 @@ opaque
             → ⌞ not (p z) ⌟ ⊎ (z ∉ s)
   filter-∉ {p} {s} {z} z∉f with p z | recall p z
   ... | true  | ⟪ eq ⟫ =
-    inr (contra (∈-filter (so≃is-true ⁻¹ $ eq)) z∉f)
+    inr (contra (∈-filterₛ (so≃is-true ⁻¹ $ eq)) z∉f)
   ... | false | _ = inl oh
 
   filter-all : {p : A → Bool} {s : LFSet A}
@@ -332,6 +336,42 @@ opaque
     go .truncʳ = hlevel!
 
 opaque
+  unfolding mapₛ
+
+  map-∈ᴱ : {A : 𝒰 ℓ} {B : 𝒰 ℓ′} -- why
+            {f : A → B} {s : LFSet A} {z : B}
+          → z ∈ mapₛ f s
+          → Erased (∃[ x ꞉ A ] ((x ∈ₛ s) × (z ＝ f x)))
+  map-∈ᴱ {A} {B} {f} {s} {z} = elim-prop go s
+    where
+    go : Elim-prop λ q → z ∈ mapₛ f q → Erased (∃[ x ꞉ A ] ((x ∈ₛ q) × (z ＝ f x)))
+    go .[]ʳ = false! ⦃ Refl-x∉ₛ[] ⦄
+    go .∷ʳ x {xs} ih x∈∷ =
+      erase
+        (rec!
+              [ (λ z=fx → ∣ x , hereₛ refl , z=fx ∣₁)
+              , (λ z∈fxs →
+                    map (λ where (q , xq , zeq) → q , thereₛ xq , zeq)
+                       (ih z∈fxs .erased)) ]ᵤ
+              (∈ₛ-∷→ᴱ  x∈∷ .erased))
+    go .truncʳ x = hlevel!
+
+  ∈-mapₛ : {A : 𝒰 ℓ} {B : 𝒰 ℓ′} -- why
+            {f : A → B} {s : LFSet A} {y : A}
+          → y ∈ s → f y ∈ mapₛ f s
+  ∈-mapₛ {f} {s} {y} = elim-prop go s
+    where
+    go : Elim-prop λ q → y ∈ q → f y ∈ mapₛ f q
+    go .[]ʳ = false! ⦃ Refl-x∉ₛ[] ⦄
+    go .∷ʳ x {xs} ih y∈∷ =
+      Recomputable-∈ₛ .recompute $ erase
+        (rec! [ (λ y=x → hereₛ (ap f y=x))
+              , thereₛ ∘ ih
+              ]ᵤ
+           (∈ₛ-∷→ᴱ {x = x} y∈∷ .erased))
+    go .truncʳ x = hlevel!
+
+opaque
   unfolding bindₛ
 
   bind-∈ᴱ : {A : 𝒰 ℓ} {B : 𝒰 ℓ′} -- why
@@ -365,3 +405,64 @@ opaque
               ]ᵤ
            (∈ₛ-∷→ᴱ {x = x} y∈∷ .erased))
     go .truncʳ x = hlevel!
+
+opaque
+  unfolding joinₛ
+
+  -- TODO we can also get rid of erasure by requiring decidability on ≤ directly
+  joinₛ-∈-≤ᴱ : {o ℓ : Level} {A : Poset o ℓ} {js : is-join-semilattice A}
+          → {z : Poset.Ob A} {xs : LFSet (Poset.Ob A)}
+          → z ∈ xs → Erased (Poset._≤_ A z (joinₛ {js = js} xs))
+  joinₛ-∈-≤ᴱ {A} {js} {z} {xs} = elim-prop go xs
+    where
+      open Poset A renaming (_≤_ to _≤ₐ_ ; =→≤ to =→≤ₐ)
+      open is-join-semilattice js
+      go : Elim-prop λ q → z ∈ q → Erased (z ≤ₐ joinₛ {js = js} q)
+      go .[]ʳ = false!
+      go .∷ʳ x ih z∈∷ =
+         erase (rec! (≤⊎→∪ ∘ Sum.dmap =→≤ₐ (erased ∘ ih)) (∈ₛ-∷→ᴱ z∈∷ .erased))
+      go .truncʳ = hlevel!
+
+  joinₛ-∈-least : {o ℓ : Level} {A : Poset o ℓ} {js : is-join-semilattice A}
+          → {z : Poset.Ob A} {xs : LFSet (Poset.Ob A)}
+          → (∀ {x} → x ∈ xs → Poset._≤_ A x z)
+          → Poset._≤_ A (joinₛ {js = js} xs) z
+  joinₛ-∈-least {A} {js} {z} {xs} = elim-prop go xs
+    where
+      open Poset A renaming (_≤_ to _≤ₐ_)
+      open is-join-semilattice js
+      go : Elim-prop λ q → (∀ {x} → x ∈ q → x ≤ₐ z) → joinₛ {js = js} q ≤ₐ z
+      go .[]ʳ _ = ¡
+      go .∷ʳ x ih u =
+        ∪≃≤× ⁻¹ $ u (hereₛ refl) , ih (u ∘ thereₛ)
+      go .truncʳ = hlevel!
+
+opaque
+  unfolding meetₛ
+
+  meetₛ-∈-≤ᴱ : {o ℓ : Level} {A : Poset o ℓ} {ms : is-meet-semilattice A}
+          → {z : Poset.Ob A} {xs : LFSet (Poset.Ob A)}
+          → z ∈ xs → Erased (Poset._≤_ A (meetₛ {ms = ms} xs) z)
+  meetₛ-∈-≤ᴱ {A} {ms} {z} {xs} = elim-prop go xs
+    where
+      open Poset A renaming (_≤_ to _≤ₐ_ ; =→≤ to =→≤ₐ)
+      open is-meet-semilattice ms
+      go : Elim-prop λ q → z ∈ q → Erased (meetₛ {ms = ms} q ≤ₐ z)
+      go .[]ʳ = false!
+      go .∷ʳ x ih z∈∷ =
+         erase (rec! (≤⊎→∩ ∘ Sum.dmap (=→≤ₐ ∘ _⁻¹) (erased ∘ ih)) (∈ₛ-∷→ᴱ z∈∷ .erased))
+      go .truncʳ = hlevel!
+
+  meetₛ-∈-greatest : {o ℓ : Level} {A : Poset o ℓ} {ms : is-meet-semilattice A}
+          → {z : Poset.Ob A} {xs : LFSet (Poset.Ob A)}
+          → (∀ {x} → x ∈ xs → Poset._≤_ A z x)
+          → Poset._≤_ A z (meetₛ {ms = ms} xs)
+  meetₛ-∈-greatest {A} {ms} {z} {xs} = elim-prop go xs
+    where
+      open Poset A renaming (_≤_ to _≤ₐ_)
+      open is-meet-semilattice ms
+      go : Elim-prop λ q → (∀ {x} → x ∈ q → Poset._≤_ A z x) → Poset._≤_ A z (meetₛ {ms = ms} q)
+      go .[]ʳ _ = !
+      go .∷ʳ x ih l =
+         ∩≃≤× ⁻¹ $ l (hereₛ refl) , ih (l ∘ thereₛ)
+      go .truncʳ = hlevel!

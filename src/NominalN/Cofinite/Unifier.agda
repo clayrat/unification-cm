@@ -1,5 +1,5 @@
 {-# OPTIONS --safe #-}
-module Nominal.Cofinite.Unifier where
+module NominalN.Cofinite.Unifier where
 
 open import Prelude
 open import Meta.Effect
@@ -14,9 +14,9 @@ open import Data.List.Correspondences.Unary.All
 open import LFSet
 
 open import Id
-open import Nominal.Term
-open import Nominal.Cofinite.Base
-open import Nominal.Cofinite.Sub
+open import NominalN.Term
+open import NominalN.Cofinite.Base
+open import NominalN.Cofinite.Sub
 
 -- unifier
 
@@ -98,7 +98,7 @@ unify-tm {v} {t′} {s} (`` x)    ea =
     (v ≟ x)
 unify-tm         {s} (p ⟶ q) ea =
   ap² _⟶_ (unify-tm {s = s} p ea) (unify-tm {s = s} q ea)
-unify-tm              con      ea = refl
+unify-tm             (con s)   ea = refl
 
 unifier-subs : ∀ {v t s} l
              → unifies (`` v) t s

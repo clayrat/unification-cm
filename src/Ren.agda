@@ -1,5 +1,5 @@
 {-# OPTIONS --safe #-}
-module Nominal.Cofinite.Ren where
+module Ren where
 
 open import Prelude
 open import Foundations.Sigma
@@ -31,8 +31,7 @@ open import LFSet
 open import LFSet.Membership
 open import LFSet.Discrete
 
-open import Nominal.Term
-open import Nominal.Cofinite.Base
+open import Id
 
 -- cofinite renaming theory
 
@@ -166,13 +165,28 @@ _↔1_ : Id → Id → Ren
            return (λ q → (if ⌊ q ⌋ then x else z) ＝ z)
            then refl)
 
+{-
+-- injective
+
+injective-ren : (f : Id → Id) → Injective f → (s : LFSet Id) → ({x : Id} → x ∉ s → f x ＝ x) → Ren
+injective-ren f fi s c .eqvr =
+  f , is-surjective-embedding→is-equiv
+        (λ x → Dec.elim
+                  {C = λ _ → ∥ fibre f x ∥₁}
+                  (λ x∈ → ∣ {!!} , {!!} ∣₁ )
+                  (λ x∉ → ∣ x , c x∉ ∣₁)
+                  (x ∈? s))
+        (set-injective→is-embedding! fi)
+injective-ren f fi s c .supr = s
+injective-ren f fi s c .cofr = c
+-}
+
 -- orbits
 
 is-fixed-point : Id ≃ Id → Id → ℕ → 𝒰
 is-fixed-point r x n = (r $ iter n (r $_) x) ＝ x
 
--- TODO this is probably more complicated than necessary
--- TODO try computing traject directly
+-- TODO refactor as in Quasi
 
 Pos : Id ≃ Id → Id → ℕ → Prop 0ℓ
 Pos r x n = el! (is-fixed-point r x n)
@@ -189,8 +203,8 @@ opaque
     → Σ[ Pos r x ]
 
   osizebnd-body : (r : Id ≃ Id) → (s : LFSet Id)
-             → ((s′ : LFSet Id) → sizeₛ s′ < sizeₛ s → osizebnd-body-type r s′)
-             → osizebnd-body-type r s
+                → ((s′ : LFSet Id) → sizeₛ s′ < sizeₛ s → osizebnd-body-type r s′)
+                → osizebnd-body-type r s
   osizebnd-body r s ih ac co x ae with x ∈? ac
   osizebnd-body r s ih ac co x ae | yes x∈a = ae x x∈a
   osizebnd-body r s ih ac co x ae | no x∉a with x ∈? s
@@ -293,7 +307,8 @@ traject-uniq-aux {r} {x} (suc n) nle =
         (contra (map-∈Σ λ k → r .eqvr $ iter k (r .eqvr $_) x)
                 λ where (q , q∈ , qe) →
                           let q<n = count-from-to-∈ {m = 0} {n = n} q∈ .snd in
-                          osize-ne (<-≤-trans q<n nle′) (qe ⁻¹))
+                          osize-ne (<-≤-trans q<n nle′) (qe ⁻¹)
+        )
   ∷ᵘ subst Uniq
            (happly (map-pres-comp {f = λ k → iter k (r .eqvr $_) x} {g = r .eqvr $_} ⁻¹) (count-from-to 0 n) ∙ meq)
            (uniq-map (is-embedding→injective (is-equiv→is-embedding (r .eqvr .snd))) ih)

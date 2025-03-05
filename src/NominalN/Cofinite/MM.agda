@@ -1,5 +1,5 @@
 {-# OPTIONS --safe #-}
-module Nominal.Cofinite.MM where
+module NominalN.Cofinite.MM where
 
 open import Prelude
 open import Meta.Effect
@@ -26,10 +26,10 @@ open import LFSet.Membership
 open import LFSet.Discrete
 
 open import Id
-open import Nominal.Term
-open import Nominal.Cofinite.Base
-open import Nominal.Cofinite.Sub
-open import Nominal.Cofinite.Unifier
+open import NominalN.Term
+open import NominalN.Cofinite.Base
+open import NominalN.Cofinite.Sub
+open import NominalN.Cofinite.Unifier
 
 -- Naive Martelli-Montanari algorithm
 
@@ -79,28 +79,34 @@ wf-sub-insert {ctx} {su} {v} {t} wr vin wf {x} xin =
 -- failure
 
 data UnifyFailure : List Constr → 𝒰 where
-  occ-fail-l : ∀ {v t lc}
-             → t ≠ `` v → occurs v t
-             → UnifyFailure ((`` v , t) ∷ lc)
-  occ-fail-r : ∀ {v t lc}
-             → t ≠ `` v → occurs v t
-             → UnifyFailure ((t , `` v) ∷ lc)
-  con-app    : ∀ {l r lc}
-             → UnifyFailure ((con , l ⟶ r) ∷ lc)
-  app-con    : ∀ {l r lc}
-             → UnifyFailure ((l ⟶ r , con) ∷ lc)
-  arr-arr    : ∀ {l l' r r' lc}
-             → UnifyFailure ((l , l') ∷ (r , r') ∷ lc)
-             → UnifyFailure ((l ⟶ r , l' ⟶ r') ∷ lc)
-  constr-rec : ∀ {t t' l}
-             → UnifyFailure l
-             → UnifyFailure ((t , t') ∷ l)
-  subs-rec-l : ∀ {v t l}
-             → UnifyFailure ((v ≔ t) $↦L l)
-             → UnifyFailure ((`` v , t) ∷ l)
-  subs-rec-r : ∀ {v t l}
-             → UnifyFailure ((v ≔ t) $↦L l)
-             → UnifyFailure ((t , `` v) ∷ l)
+  -- occurrence failures
+  occ-fail-l  : ∀ {v t lc}
+              → t ≠ `` v → occurs v t
+              → UnifyFailure ((`` v , t) ∷ lc)
+  occ-fail-r  : ∀ {v t lc}
+              → t ≠ `` v → occurs v t
+              → UnifyFailure ((t , `` v) ∷ lc)
+  -- symbol mismatches
+  con-con-sym : ∀ {sl sr lc}
+              → sl ≠ sr
+              → UnifyFailure ((con sl , con sr) ∷ lc)
+  con-app     : ∀ {l r s lc}
+              → UnifyFailure ((con s , l ⟶ r) ∷ lc)
+  app-con     : ∀ {l r s lc}
+              → UnifyFailure ((l ⟶ r , con s) ∷ lc)
+  -- recursive propagation
+  arr-arr     : ∀ {l l' r r' lc}
+              → UnifyFailure ((l , l') ∷ (r , r') ∷ lc)
+              → UnifyFailure ((l ⟶ r , l' ⟶ r') ∷ lc)
+  constr-rec  : ∀ {t t' l}
+              → UnifyFailure l
+              → UnifyFailure ((t , t') ∷ l)
+  subs-rec-l  : ∀ {v t l}
+              → UnifyFailure ((v ≔ t) $↦L l)
+              → UnifyFailure ((`` v , t) ∷ l)
+  subs-rec-r  : ∀ {v t l}
+              → UnifyFailure ((v ≔ t) $↦L l)
+              → UnifyFailure ((t , `` v) ∷ l)
 
 failure→no-unifier : ∀ {lc} → UnifyFailure lc → ↦𝒫∅ (unifier lc)
 failure→no-unifier (occ-fail-l {t} ne oc) s u with occ→ctx {t = t} oc
@@ -109,6 +115,8 @@ failure→no-unifier (occ-fail-l {t} ne oc) s u with occ→ctx {t = t} oc
 failure→no-unifier (occ-fail-r {t} ne oc) s u with occ→ctx {t = t} oc
 ... | []    , e = ne e
 ... | p ∷ c , e = no-unify-+var {p = p} s (all-head u ⁻¹ ∙ ap (s $↦_) e)
+failure→no-unifier (con-con-sym ne)       s u =
+  ne (con-inj (all-head u))
 failure→no-unifier  con-app        s u = ⟶≠con (all-head u ⁻¹)
 failure→no-unifier  app-con        s u = ⟶≠con (all-head u)
 failure→no-unifier (arr-arr uf)    s u =
@@ -231,9 +239,9 @@ unify-body (ctx , (pl ⟶ ql , pr ⟶ qr)  ∷ lc) ih wcl | no ne | inl (su , ws
            mx)
       )
 unify-body (ctx , (pl ⟶ ql , pr ⟶ qr)  ∷ lc) ih wcl | no ne | inr uf = inr (arr-arr uf)
-unify-body (ctx , (pl ⟶ ql , con)       ∷ lc) ih wcl | no ne = inr app-con
-unify-body (ctx , (con       , pr ⟶ qr) ∷ lc) ih wcl | no ne = inr con-app
-unify-body (ctx , (con       , con)       ∷ lc) ih wcl | no ne = absurd (ne refl)
+unify-body (ctx , (pl ⟶ ql , con s₂)    ∷ lc) ih wcl | no ne = inr app-con
+unify-body (ctx , (con s₁    , pr ⟶ qr) ∷ lc) ih wcl | no ne = inr con-app
+unify-body (ctx , (con s₁    , con s₂)    ∷ lc) ih wcl | no ne = inr (con-con-sym (contra (ap con) ne))
 unify-body (ctx , (tl        , `` v)      ∷ lc) ih wcl | no ne with occurs-dec {v} {t = tl}
 unify-body (ctx , (tl        , `` v)      ∷ lc) ih wcl | no ne | yes oc = inr (occ-fail-r ne oc)
 unify-body (ctx , (tl        , `` v)      ∷ lc) ih wcl | no ne | no noc with ih (rem v ctx , (v ≔ tl) $↦L lc)

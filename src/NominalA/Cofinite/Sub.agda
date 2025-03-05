@@ -535,3 +535,110 @@ optimist-lemma {q} {a} {f} {g} dc (pfa , pmax) tq (qgfa , qmax) =
                qmax j $
                subst q (thin-◇-l {xs = w} {g = a} ⁻¹ ∙ ap (_◇ a) (ea ⁻¹) ∙ ◇-assoc {g = f} {h = a}) $
                tq (f′ ◇ a) w qfa)
+
+-- renaming
+
+-- everything is mapped to a variable
+is-ren : ↦𝒫
+is-ren s = {x : Id} → fibre ``_ (s $ x)
+
+id-ren : is-ren id↦
+id-ren {x} = x , refl
+
+◇-ren : ∀ {f g} → is-ren f → is-ren g → is-ren (f ◇ g)
+◇-ren {f} fr gr {x} =
+  let (y , eg) = gr {x}
+      (z , ef) = fr {y}
+    in
+  z , (ef ∙ ap (f $↦_) eg)
+
+-- alpha-equivalence
+_~α_ : Term → Term → 𝒰
+s ~α t = Σ[ f ꞉ Sub ] Σ[ g ꞉ Sub ] is-ren f × is-ren g × ((f $↦ s) ＝ t) × ((g $↦ t) ＝ s)
+
+~α-refl : ∀ {t} → t ~α t
+~α-refl = id↦ , id↦ , id-ren , id-ren , sub-id , sub-id
+
+~α-sym : ∀ {s t} → s ~α t → t ~α s
+~α-sym (f , g , fr , gr , fs , gt) = g , f , gr , fr , gt , fs
+
+~α-trans : ∀ {r s t} → r ~α s → s ~α t → r ~α t
+~α-trans {r} {s} {t} (f , g , fr , gr , fs , gt) (f′ , g′ , fr′ , gr′ , fs′ , gt′) =
+    f′ ◇ f
+  , g ◇ g′
+  , ◇-ren {f = f′} {g = f} fr′ fr
+  , ◇-ren {f = g} {g = g′} gr gr′
+  , sub-◇ {t = r} ∙ ap (f′ $↦_) fs ∙ fs′
+  , sub-◇ {t = t} ∙ ap (g $↦_) gt′ ∙ gt
+
+-- TODO adhoc
+ren-restrict-∪∷ : ∀ {xs ys f}
+                 → is-ren (restrict xs f)
+                 → is-ren (restrict ys f)
+                 → is-ren (restrict (xs ∪∷ ys) f)
+ren-restrict-∪∷ {xs} {ys} {f} rx ry {x} =
+  subst (λ q → Σ[ z ꞉ Id ] ((`` z) ＝ (if q then (f $ x) else (`` x))))
+        (∈ₛ?-∪∷ {s₁ = xs} {s₂ = ys} ⁻¹) $
+  Dec.elim
+      {C = λ q → Σ[ z ꞉ Id ] ((`` z) ＝ (if ⌊ q ⌋ or (x ∈ₛ? ys) then (f $ x) else (`` x)))}
+      (λ x∈ →
+        let (n , e) = rx {x} in
+        n , e ∙ ap (λ q → (if q then (f $ x) else (`` x))) (so≃is-true $ true→so! x∈))
+      (λ _ → ry {x})
+      (x ∈? xs)
+
+mutual
+  eqv-ren : ∀ {s t f g}
+          → (f $↦ s) ＝ t
+          → (g $↦ t) ＝ s
+          → is-ren (restrict (vars s) f) × is-ren (restrict (vars t) g)
+  eqv-ren {s = `` sx}      {t = `` tx}      {f} {g} ef eg =
+      (λ {x} → Dec.elim
+                  {C = λ q → Σ[ z ꞉ Id ] ((`` z) ＝ (if ⌊ q ⌋ or false then (f $ x) else (`` x)))}
+                  (λ e → tx , ef ⁻¹ ∙ ap (f $_) (e ⁻¹))
+                  (λ _ → x , refl)
+                  (x ≟ sx))
+    , (λ {x} → Dec.elim
+                  {C = λ q → Σ[ z ꞉ Id ] ((`` z) ＝ (if ⌊ q ⌋ or false then (g $ x) else (`` x)))}
+                  (λ e → sx , eg ⁻¹ ∙ ap (g $_) (e ⁻¹))
+                  (λ _ → x , refl)
+                  (x ≟ tx))
+  eqv-ren {s = `` sx}      {t = con st tst}         ef eg = false! eg
+  eqv-ren {s = con ss tss} {t = `` tx}              ef eg = false! ef
+  eqv-ren {s = con ss tss} {t = con st tst}         ef eg =
+    eqv-ren-s (con-inj ef .snd) (con-inj eg .snd)
+
+  eqv-ren-s : ∀ {tss tst f g}
+            → f $↦[] tss ＝ tst
+            → g $↦[] tst ＝ tss
+            → is-ren (restrict (vars-list tss) f) ×
+              is-ren (restrict (vars-list tst) g)
+  eqv-ren-s {tss = []}      {tst = []}      {f} {g} ef eg =
+      (λ {x} → x , refl)
+    , (λ {x} → x , refl)
+  eqv-ren-s {tss = []}      {tst = y ∷ tst} {f} {g} ef eg = false! ⦃ Reflects-[]≠∷ ⦄ ef
+  eqv-ren-s {tss = x ∷ tss} {tst = []}      {f} {g} ef eg = false! ⦃ Reflects-[]≠∷ ⦄ eg
+  eqv-ren-s {tss = x ∷ tss} {tst = y ∷ tst} {f} {g} ef eg =
+    let (rx , rt) = eqv-ren (∷-head-inj ef) (∷-head-inj eg)
+        (ry , rs) = eqv-ren-s (∷-tail-inj ef) (∷-tail-inj eg)
+      in
+      ren-restrict-∪∷ {xs = vars x} {f = f} rx ry
+    , ren-restrict-∪∷ {xs = vars y} {f = g} rt rs
+
+-- we only get antisymmetry modulo α-equivalence
+-- this suggests we should quotient by it early on
+≤t-anti-α : ∀ {t s}
+          → t ≤t s → s ≤t t → t ~α s
+≤t-anti-α {t} {s} (f , fe) (g , ge) =
+  let (rf , rg) = eqv-ren fe ge in
+    restrict (vars t) g
+  , restrict (vars s) f
+  , rg
+  , rf
+  , restrict-$↦ {f = g} {t = t} id ∙ ge
+  , restrict-$↦ {f = f} {t = s} id ∙ fe
+
+-- reverse direction holds trivially
+α-≤t : ∀ {t s}
+     → t ~α s → t ≤t s × s ≤t t
+α-≤t {t} {s} (f , g , fr , gr , fs , gt) = (g , gt) , (f , fs)

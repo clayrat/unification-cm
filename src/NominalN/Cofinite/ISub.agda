@@ -1,5 +1,5 @@
 {-# OPTIONS --safe #-}
-module Nominal.Cofinite.ISub where
+module NominalN.Cofinite.ISub where
 
 open import Prelude
 open import Foundations.Sigma
@@ -22,9 +22,9 @@ open import LFSet.Membership
 open import LFSet.Discrete
 
 open import Id
-open import Nominal.Term
-open import Nominal.Cofinite.Base
-open import Nominal.Cofinite.Sub
+open import NominalN.Term
+open import NominalN.Cofinite.Base
+open import NominalN.Cofinite.Sub
 
 -- inverse substitution as a cofinitely quantified map
 -- (dom overapproximates the actual domain)
@@ -89,9 +89,9 @@ mutual
   empi-$← = empi-$←r
 
   empi-$←r : ∀ {t} → empi $←r t ＝ t
-  empi-$←r {t = `` x} = refl
+  empi-$←r {t = `` x}    = refl
   empi-$←r {t = p ⟶ q} = ap² _⟶_ (empi-$← {t = p}) (empi-$← {t = q})
-  empi-$←r {t = con} = refl
+  empi-$←r {t = con s}   = refl
 
 inv-empi : inv-sub id↦ ＝ empi
 inv-empi =
@@ -149,8 +149,8 @@ mutual
               → s $↦ (inv-sub s $←r t) ＝ t
   inv-$↦-$←r {t = `` x}   {s} si vd t∉ =
     s .cof (vd x (hereₛ refl))
-  inv-$↦-$←r {t = p ⟶ q} {s}   si vd t∉ =
+  inv-$↦-$←r {t = p ⟶ q}     si vd t∉ =
     ap² _⟶_
-       (inv-$↦-$← {t = p} {s = s} si λ x → vd x ∘ ∈ₛ-∪∷←l)
-       (inv-$↦-$← {t = q} {s = s} si λ x → vd x ∘ ∈ₛ-∪∷←r {s₁ = vars p})
-  inv-$↦-$←r {t = con}    {s} si vd t∉ = refl
+       (inv-$↦-$← {t = p} si λ x → vd x ∘ ∈ₛ-∪∷←l)
+       (inv-$↦-$← {t = q} si λ x → vd x ∘ ∈ₛ-∪∷←r {s₁ = vars p})
+  inv-$↦-$←r {t = con sy}     si vd t∉ = refl

@@ -1,5 +1,5 @@
 {-# OPTIONS --safe #-}
-module Nominal.Cofinite.Sub where
+module NominalN.Cofinite.Sub where
 
 open import Prelude
 open import Foundations.Sigma
@@ -23,8 +23,8 @@ open import LFSet.Discrete
 open import Id
 open import Ren
 open import Ren.Quasi
-open import Nominal.Term
-open import Nominal.Cofinite.Base
+open import NominalN.Term
+open import NominalN.Cofinite.Base
 
 -- (idempotent) substitution as a cofinitely quantified map
 -- (dom overapproximates the actual domain)
@@ -55,7 +55,7 @@ sub-ext {s₁ = is-sub f₁ d₁ c₁} {s₂ = is-sub f₂ d₂ c₂} ef ed =
 _$↦_ : Sub → Term → Term
 s $↦ (`` x)    = s $ x
 s $↦ (p ⟶ q) = (s $↦ p) ⟶ (s $↦ q)
-s $↦ con       = con
+s $↦ (con sy)  = con sy
 
 -- identity
 id↦ : Sub
@@ -103,12 +103,12 @@ codom s = mapₛ (s .fun) (s .dom)
 sub-id : ∀ {t} → id↦ $↦ t ＝ t
 sub-id {t = `` x}    = refl
 sub-id {t = p ⟶ q} = ap² _⟶_ (sub-id {t = p}) (sub-id {t = q})
-sub-id {t = con}     = refl
+sub-id {t = con s}   = refl
 
 sub-◇ : ∀ {s1 s2 t} → (s1 ◇ s2) $↦ t ＝ s1 $↦ (s2 $↦ t)
-sub-◇ {t = `` x} = refl
+sub-◇ {t = `` x}    = refl
 sub-◇ {t = p ⟶ q} = ap² _⟶_ (sub-◇ {t = p}) (sub-◇ {t = q})
-sub-◇ {t = con} = refl
+sub-◇ {t = con s}   = refl
 
 ◇-id-l : {s : Sub} → id↦ ◇ s ＝ s
 ◇-id-l {s} = sub-ext (fun-ext λ x → sub-id) (∪∷-id-r (s .dom))
@@ -131,7 +131,7 @@ noc-all-id {s} {t = `` x}    noca =
 noc-all-id     {t = p ⟶ q} noca =
   ap² _⟶_ (noc-all-id λ z z∈ → contra inl (noca z z∈))
             (noc-all-id λ z z∈ → contra inr (noca z z∈))
-noc-all-id     {t = con}     noca = refl
+noc-all-id     {t = con s}   noca = refl
 
 -- reverse doesn't seem to hold
 
@@ -158,9 +158,9 @@ sub-rem (wf-arr wp wq)       x∈ u wr = wf-arr (sub-rem wp x∈ u wr) (sub-rem 
 sub-rem  wf-con              x∈ u wr = wf-con
 
 thin-$↦ : ∀ {xs f t} → thin xs f $↦ t ＝ f $↦ t
-thin-$↦      {t = `` x} = refl
+thin-$↦      {t = `` x}    = refl
 thin-$↦ {xs} {t = p ⟶ q} = ap² _⟶_ (thin-$↦ {xs = xs} {t = p}) (thin-$↦ {xs = xs} {t = q})
-thin-$↦      {t = con} = refl
+thin-$↦      {t = con s}   = refl
 
 thin-[] : ∀ {f} → thin [] f ＝ f
 thin-[] = sub-ext refl refl
@@ -190,7 +190,7 @@ vars-eq {s} {s′} {t = p ⟶ q} eq =
   ap² _⟶_
     (vars-eq {t = p} (eq ∘ ∈ₛ-∪∷←l))
     (vars-eq {t = q} (eq ∘ ∈ₛ-∪∷←r {s₁ = vars p}))
-vars-eq {s} {s′} {t = con}    eq = refl
+vars-eq {s} {s′} {t = con sy} eq = refl
 
 eq-vars : ∀ {s s′ t}
         → (s $↦ t) ＝ (s′ $↦ t)
@@ -476,15 +476,15 @@ ren-term-inv {s = `` xs}     {t = `` xt}     {r} rst =
     ap ``_ (  ap (r .eqvr ⁻¹ $_) (``-inj rst ⁻¹)
             ∙ is-equiv→unit (r .eqvr .snd) xs) -- TODO ∙-inv-i or whatever
 ren-term-inv {s = ps ⟶ qs} {t = `` xt}         rst = false! rst
-ren-term-inv {s = con}       {t = `` xt}         rst = false! rst
+ren-term-inv {s = con s₁}   {t = `` xt}         rst = false! rst
 ren-term-inv {s = `` xs}     {t = pt ⟶ qt}     rst = false! rst
 ren-term-inv {s = ps ⟶ qs} {t = pt ⟶ qt}  {r} rst =
   let (pe , qe) = ⟶-inj rst in
   ap² _⟶_ (ren-term-inv {r = r} pe) (ren-term-inv {r = r} qe)
-ren-term-inv {s = con}       {t = pt ⟶ qt}     rst = false! rst
-ren-term-inv {s = `` x}      {t = con}           rst = false! rst
-ren-term-inv {s = ps ⟶ qs} {t = con}           rst = false! rst
-ren-term-inv {s = con}       {t = con}           rst = refl
+ren-term-inv {s = con s₁}    {t = pt ⟶ qt}     rst = false! rst
+ren-term-inv {s = `` x}      {t = con s₂}       rst = false! rst
+ren-term-inv {s = ps ⟶ qs} {t = con s₂}        rst = false! rst
+ren-term-inv {s = con s₁}    {t = con s₂}       rst = rst ⁻¹
 
 ◇-◇↔ : ∀ {f g}
       → ren→sub (f ◇↔ g) ＝ (ren→sub f ◇ ren→sub g)
@@ -535,7 +535,7 @@ eqv-qren {s = `` sx}     {t = `` tx} {f} {g} ef eg =
         return (λ q → (g $ z) ＝ (`` (if ⌊ q ⌋ then sx else z)))
         then (ap (g $_) z=tx ∙ eg)
 eqv-qren {s = `` sx}     {t = pt ⟶ qt} ef eg = false! eg
-eqv-qren {s = `` sx}     {t = con}       ef eg = false! eg
+eqv-qren {s = `` sx}     {t = con s₂}   ef eg = false! eg
 eqv-qren {s = ps ⟶ qs} {t = `` tx}     ef eg = false! ef
 eqv-qren {s = ps ⟶ qs} {t = pt ⟶ qt} {f} {g} ef eg =
   let (egp , egq) = ⟶-inj eg
@@ -583,10 +583,10 @@ eqv-qren {s = ps ⟶ qs} {t = pt ⟶ qt} {f} {g} ef eg =
                                     z∈))
                (z ∈? qrq .bdom))
           (z ∈? qrp .bdom)
-eqv-qren {s = ps ⟶ qs} {t = con}       ef eg = false! eg
-eqv-qren {s = con}       {t = `` tx}     ef eg = false! ef
-eqv-qren {s = con}       {t = pt ⟶ qt} ef eg = false! ef
-eqv-qren {s = con}       {t = con}       ef eg =
+eqv-qren {s = ps ⟶ qs} {t = con s₂}     ef eg = false! eg
+eqv-qren {s = con s₁}    {t = `` tx}     ef eg = false! ef
+eqv-qren {s = con s₁}    {t = pt ⟶ qt} ef eg = false! ef
+eqv-qren {s = con s₁}    {t = con s₂}       ef eg =
     id-qren
   , refl
   , refl

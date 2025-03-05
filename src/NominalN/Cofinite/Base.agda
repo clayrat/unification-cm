@@ -1,5 +1,5 @@
 {-# OPTIONS --safe #-}
-module Nominal.Cofinite.Base where
+module NominalN.Cofinite.Base where
 
 open import Prelude
 open import Meta.Effect
@@ -21,7 +21,7 @@ open import LFSet.Membership
 open import LFSet.Discrete
 
 open import Id
-open import Nominal.Term
+open import NominalN.Term
 
 -- occurs check
 
@@ -29,19 +29,19 @@ open import Nominal.Term
 occurs : Id → Term → 𝒰
 occurs v (`` x)    = v ＝ x
 occurs v (p ⟶ q) = occurs v p ⊎ occurs v q
-occurs v con       = ⊥
+occurs v (con _)   = ⊥
 
 occurs? : Id → Term → Bool
 occurs? v (`` x)    = v == x
 occurs? v (p ⟶ q) = occurs? v p or occurs? v q
-occurs? v con       = false
+occurs? v (con _)   = false
 
 occurs-reflects : ∀ {v} {t}
                 → Reflects (occurs v t) (occurs? v t)
 occurs-reflects {t = `` x}    = Reflects-ℕ-Path
 occurs-reflects {t = p ⟶ q} =
   Reflects-⊎ ⦃ rp = occurs-reflects {t = p} ⦄ ⦃ rq = occurs-reflects {t = q} ⦄
-occurs-reflects {t = con}     = ofⁿ id
+occurs-reflects {t = con s}   = ofⁿ id
 
 occurs-dec : ∀ {v t} → Dec (occurs v t)
 occurs-dec {v} {t} .does  = occurs? v t
@@ -84,8 +84,8 @@ no-cycle-lemma {ps = inr l ∷ ps} {t = p ⟶ q} e =
   let (_ , eq) = ⟶-inj e in
   false! (no-cycle-lemma {ps = ps ∷r inr p} {t = q}
           (ap (_+: q) (snoc-append ps) ∙ +:-++ {ps = ps} ∙ eq))
-no-cycle-lemma {ps = inl r ∷ ps} {t = con}     e = ⊥.absurd (⟶≠con e)
-no-cycle-lemma {ps = inr l ∷ ps} {t = con}     e = ⊥.absurd (⟶≠con e)
+no-cycle-lemma {ps = inl r ∷ ps} {t = con s}   e = ⊥.absurd (⟶≠con e)
+no-cycle-lemma {ps = inr l ∷ ps} {t = con s}   e = ⊥.absurd (⟶≠con e)
 
 -- constraints
 
@@ -110,7 +110,7 @@ Varctx = LFSet Id
 data wf-tm : Varctx → Term → 𝒰 where
   wf-var : ∀ {c x}   → x ∈ c                → wf-tm c (`` x)
   wf-arr : ∀ {c p q} → wf-tm c p → wf-tm c q → wf-tm c (p ⟶ q)
-  wf-con : ∀ {c}                             → wf-tm c con
+  wf-con : ∀ {c s}                           → wf-tm c (con s)
 
 wf-tm-var : ∀ {c x} → wf-tm c (`` x) → x ∈ c
 wf-tm-var (wf-var x∈) = x∈
@@ -139,7 +139,7 @@ wf-tm-dec {v} {t = p ⟶ q} =
            (contra λ where
                       (wf-arr wp wq) → wp , wq)
              (Dec-× ⦃ da = wf-tm-dec {v} {t = p} ⦄ ⦃ db = wf-tm-dec {v} {t = q} ⦄)
-wf-tm-dec {t = con} = yes wf-con
+wf-tm-dec {t = con s} = yes wf-con
 
 wf-tm-recomp : ∀ {v t} → Recomputable (wf-tm v t)
 wf-tm-recomp = Recomputable-Dec ⦃ d = wf-tm-dec ⦄

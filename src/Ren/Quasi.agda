@@ -1,5 +1,5 @@
 {-# OPTIONS --safe #-}
-module Nominal.Cofinite.Ren.Quasi where
+module Ren.Quasi where
 
 open import Prelude
 open import Foundations.Sigma
@@ -33,9 +33,8 @@ open import LFSet
 open import LFSet.Membership
 open import LFSet.Discrete
 
-open import Nominal.Term
-open import Nominal.Cofinite.Base
-open import Nominal.Cofinite.Ren
+open import Id
+open import Ren
 
 -- cofinite quasirenaming theory
 -- (renaming where source and target variable sets don't necessarily coincide)
@@ -221,6 +220,7 @@ _↔Q_ : Id → Id → QRen
      return (λ q → (if ⌊ q ⌋ then x else z) ＝ z)
      then refl
 
+-- the following seems to be a variation on Cantor-Schröder-Bernstein / Myhill's isomorphism theorem
 -- quasirenaming trajectory
 
 IsQTraject : QRen → Id → List Id → 𝒰

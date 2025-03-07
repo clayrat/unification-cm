@@ -236,3 +236,157 @@ unify⇓ {cs} =
     (wcl-constr-vars {cs = cs})
 
 -- correctness
+
+SubT-correct : Varctx → List Constr → SubT → 𝒰
+SubT-correct ctx cs s = Wf-subst ctx (to-sub s) × Max↦ (unifier cs) (to-sub s)
+
+Unify-correct : Varctx → (cs : List Constr) → SubT ⊎ UnifyFailure cs → 𝒰
+Unify-correct ctx cs = [ SubT-correct ctx cs , (λ _ → ⊤) ]ᵤ
+
+unify-correct-body : ▹ κ (   (cs : List Constr)
+                           → (ctx : Varctx)
+                           → wf-constr-list ctx cs
+                           → gAllᵖ κ (Unify-correct ctx cs) (unifyᵏ cs))
+                   → (cs : List Constr)
+                   → (ctx : Varctx)
+                   → wf-constr-list ctx cs
+                   → gAllᵖ κ (Unify-correct ctx cs) (unifyᵏ cs)
+unify-correct-body     ih▹ []               ctx w =
+  gAll-now (wf-idsub , ([] , (λ f′ _ → ≤↦-id {f = f′})))
+unify-correct-body     ih▹ ((tl , tr) ∷ cs) ctx w with tl ≟ tr
+unify-correct-body {κ} ih▹ ((tl , tr) ∷ cs) ctx w | yes e =
+  gAll-later λ α →
+    all-mapᵏ (λ where
+                 {x = inl su} (wsu , mx) →
+                   wsu , (Max↦≃ (unifier-eq e) (to-sub su) $ mx)
+                 {x = inr _} _ → tt)
+             (subst (gAllᵖ κ (Unify-correct ctx cs))
+                    (happly (▹-ap (pfix unifyᵏ-body ⁻¹) α) cs)
+                    ((ih▹ ⊛ next cs ⊛ next ctx ⊛ next (all-tail w)) α))
+unify-correct-body     ih▹ (((`` v)      , tr)         ∷ cs) ctx w | no ne with occurs-dec {v} {t = tr}
+unify-correct-body     ih▹ (((`` v)      , tr)         ∷ cs) ctx w | no ne | yes oc = gAll-now tt
+unify-correct-body {κ} ih▹ (((`` v)      , tr)         ∷ cs) ctx w | no ne | no noc =
+  let w′ = subst (wf-constr-list (rem v ctx))
+                 (app-sngL-$↦L ⁻¹)
+                 (wf-constr-list-remove (wf-tm-var (all-head w .fst))
+                                 noc (all-head w .snd) (all-tail w))
+    in
+  gAll-later λ α →
+    all-mapᵏ (λ where
+                 {x = inl su} (wsu , mx) →
+                     wf-sub-insert {su = su}
+                                   (occurs-wf-tm (all-head w .snd) noc)
+                                   (wf-tm-var (all-head w .fst)) wsu
+                   , (Max↦≃ (λ f →   ↦𝒫◇-id≃ {p = ↦𝒫× (unifies (`` v) tr) (unifier cs) } f
+                                    ∙ all-×≃ {P = λ where (x , y) → unifies x y f} ⁻¹)
+                             (to-sub su ◇ (v ≔ tr)) $
+                             optimist-lemma {p = unifies (`` v) tr} {q = unifier cs} {a = id↦}
+                                            {f = v ≔ tr} {g = to-sub su}
+                                (DCl-unifies {t = tr})
+                                (Max↦≃ (_⁻¹ ∘ ↦𝒫◇-id≃ {p = unifies (`` v) tr}) (v ≔ tr) $
+                                 max-flex-rigid noc)
+                                (↦thin-unifier {xs = cs})
+                                (subst (λ q → Max↦ (↦𝒫◇ (unifier cs) q) (to-sub su))
+                                       (◇-id-r {s = v ≔ tr} ⁻¹) $
+                                 Max↦≃ (λ s → unifier-append≃) (to-sub su) $
+                                 subst (λ q → Max↦ (unifier q) (to-sub su))
+                                       app-sngL-$↦L $
+                                 mx))
+                 {x = inr _} _ → tt)
+             (subst (gAllᵖ κ (Unify-correct (rem v ctx) (app-sngL v tr cs)))
+                    (happly (▹-ap (pfix unifyᵏ-body ⁻¹) α) (app-sngL v tr cs))
+                    ((ih▹ ⊛ next (app-sngL v tr cs) ⊛ next (rem v ctx) ⊛ next w′) α))
+-- ugh
+unify-correct-body     ih▹ (((pl ⟶ ql) , (`` v))     ∷ cs) ctx w | no ne with occurs-dec {v} {t = pl ⟶ ql}
+unify-correct-body     ih▹ (((pl ⟶ ql) , (`` v))     ∷ cs) ctx w | no ne | yes oc = gAll-now tt
+unify-correct-body {κ} ih▹ (((pl ⟶ ql) , (`` v))     ∷ cs) ctx w | no ne | no noc =
+  let w′ = subst (wf-constr-list (rem v ctx))
+                 (app-sngL-$↦L ⁻¹)
+                 (wf-constr-list-remove (wf-tm-var (all-head w .snd))
+                                 noc (all-head w .fst) (all-tail w))
+    in
+  gAll-later λ α →
+    all-mapᵏ (λ where
+                 {x = inl su} (wsu , mx) →
+                     wf-sub-insert {su = su}
+                                   (occurs-wf-tm (all-head w .fst) noc)
+                                   (wf-tm-var (all-head w .snd)) wsu
+                   , (Max↦≃ (λ f →   ↦𝒫◇-id≃ {p = ↦𝒫× (unifies (pl ⟶ ql) (`` v)) (unifier cs) } f
+                                    ∙ all-×≃ {P = λ where (x , y) → unifies x y f} ⁻¹)
+                             (to-sub su ◇ (v ≔ (pl ⟶ ql))) $
+                             optimist-lemma {p = unifies (pl ⟶ ql) (`` v)} {q = unifier cs} {a = id↦}
+                                             {f = v ≔ (pl ⟶ ql)} {g = to-sub su}
+                                 (DCl-unifies {s = (pl ⟶ ql)})
+                                 (Max↦≃ (λ s →   unifies-swap {t = (pl ⟶ ql)} s
+                                                ∙ (↦𝒫◇-id≃ {p = unifies (pl ⟶ ql) (`` v)} s) ⁻¹)
+                                        (v ≔ (pl ⟶ ql)) $
+                                  max-flex-rigid noc)
+                                 (↦thin-unifier {xs = cs})
+                                 (subst (λ q → Max↦ (↦𝒫◇ (unifier cs) q) (to-sub su))
+                                        (◇-id-r {s = v ≔ (pl ⟶ ql)} ⁻¹) $
+                                  Max↦≃ (λ s → unifier-append≃) (to-sub su) $
+                                  subst (λ q → Max↦ (unifier q) (to-sub su))
+                                        app-sngL-$↦L $
+                                  mx))
+                 {x = inr _} _ → tt)
+             (subst (gAllᵖ κ (Unify-correct (rem v ctx) (app-sngL v (pl ⟶ ql) cs)))
+                    (happly (▹-ap (pfix unifyᵏ-body ⁻¹) α) (app-sngL v (pl ⟶ ql) cs))
+                    ((ih▹ ⊛ next (app-sngL v (pl ⟶ ql) cs) ⊛ next (rem v ctx) ⊛ next w′) α))
+unify-correct-body {κ} ih▹ (((pl ⟶ ql) , (pr ⟶ qr)) ∷ cs) ctx w | no ne =
+  let w′ = (  (wf-tm-arr (all-head w .fst) .fst , wf-tm-arr (all-head w .snd) .fst)
+            ∷ (wf-tm-arr (all-head w .fst) .snd , wf-tm-arr (all-head w .snd) .snd)
+            ∷ all-tail w)
+    in
+  gAll-later λ α →
+    all-mapᵏ (λ where
+                 {x = inl su} (wsu , mx) →
+                     wsu
+                   , (Max↦≃ (λ s → (unifier-⟶≃ s) ⁻¹)
+                            (to-sub su) $
+                             mx)
+                 {x = inr _} _ → tt)
+             (subst (gAllᵖ κ (Unify-correct ctx ((pl , pr) ∷ (ql , qr) ∷ cs)))
+                    (happly (▹-ap (pfix unifyᵏ-body ⁻¹) α) ((pl , pr) ∷ (ql , qr) ∷ cs))
+                    ((ih▹ ⊛ next ((pl , pr) ∷ (ql , qr) ∷ cs) ⊛ next ctx ⊛ next w′) α))
+unify-correct-body     ih▹ (((pl ⟶ ql) , con sr)     ∷ cs) ctx w | no ne = gAll-now tt
+-- ugh
+unify-correct-body     ih▹ ((con sl      , (`` v))     ∷ cs) ctx w | no ne with occurs-dec {v} {t = con sl}
+unify-correct-body     ih▹ ((con sl      , (`` v))     ∷ cs) ctx w | no ne | yes oc = absurd oc
+unify-correct-body {κ} ih▹ ((con sl      , (`` v))     ∷ cs) ctx w | no ne | no noc =
+  let w′ = subst (wf-constr-list (rem v ctx))
+                 (app-sngL-$↦L ⁻¹)
+                 (wf-constr-list-remove (wf-tm-var (all-head w .snd))
+                                 noc (all-head w .fst) (all-tail w))
+    in
+  gAll-later λ α →
+    all-mapᵏ (λ where
+                 {x = inl su} (wsu , mx) →
+                     wf-sub-insert {su = su}
+                                   (occurs-wf-tm (all-head w .fst) noc)
+                                   (wf-tm-var (all-head w .snd)) wsu
+                   , (Max↦≃ (λ f →   ↦𝒫◇-id≃ {p = ↦𝒫× (unifies (con sl) (`` v)) (unifier cs) } f
+                                    ∙ all-×≃ {P = λ where (x , y) → unifies x y f} ⁻¹)
+                             (to-sub su ◇ (v ≔ (con sl))) $
+                             optimist-lemma {p = unifies (con sl) (`` v)} {q = unifier cs} {a = id↦}
+                                             {f = v ≔ (con sl)} {g = to-sub su}
+                                 (DCl-unifies {s = (con sl)})
+                                 (Max↦≃ (λ s →   unifies-swap {t = (con sl)} s
+                                                ∙ (↦𝒫◇-id≃ {p = unifies (con sl) (`` v)} s) ⁻¹)
+                                        (v ≔ (con sl)) $
+                                  max-flex-rigid noc)
+                                 (↦thin-unifier {xs = cs})
+                                 (subst (λ q → Max↦ (↦𝒫◇ (unifier cs) q) (to-sub su))
+                                        (◇-id-r {s = v ≔ (con sl)} ⁻¹) $
+                                  Max↦≃ (λ s → unifier-append≃) (to-sub su) $
+                                  subst (λ q → Max↦ (unifier q) (to-sub su))
+                                        app-sngL-$↦L $
+                                  mx))
+                 {x = inr _} _ → tt)
+             (subst (gAllᵖ κ (Unify-correct (rem v ctx) (app-sngL v (con sl) cs)))
+                    (happly (▹-ap (pfix unifyᵏ-body ⁻¹) α) (app-sngL v (con sl) cs))
+                    ((ih▹ ⊛ next (app-sngL v (con sl) cs) ⊛ next (rem v ctx) ⊛ next w′) α))
+unify-correct-body     ih▹ ((con sl      , (pr ⟶ qr)) ∷ cs) ctx w | no ne = gAll-now tt
+unify-correct-body     ih▹ ((con sl      , con sr)     ∷ cs) ctx w | no ne = gAll-now tt
+
+unify-correct : (cs : List Constr) → Allᵖ (Unify-correct (constr-vars cs) cs) (unify cs)
+unify-correct cs κ = fix {k = κ} unify-correct-body cs (constr-vars cs) (wcl-constr-vars {cs = cs})

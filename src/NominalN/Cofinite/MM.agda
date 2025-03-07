@@ -41,6 +41,24 @@ SubT = List (Id × Term)
 to-sub : SubT → Sub
 to-sub = List.rec id↦ (λ where (x , t) → _◇ (x ≔ t))
 
+app-sng : Id → Term → Term → Term
+app-sng v t (`` x)    = if v == x then t else `` x
+app-sng v t (p ⟶ q) = app-sng v t p ⟶ app-sng v t q
+app-sng v t (con s)   = con s
+
+app-sngL : Id → Term → List Constr → List Constr
+app-sngL v t = map (bimap (app-sng v t) (app-sng v t))
+
+app-sng-$↦ : ∀ {v t q} → app-sng v t q ＝ (v ≔ t) $↦ q
+app-sng-$↦ {q = `` x}    = refl
+app-sng-$↦ {q = p ⟶ q} = ap² _⟶_ (app-sng-$↦ {q = p}) (app-sng-$↦ {q = q})
+app-sng-$↦ {q = con s}   = refl
+
+app-sngL-$↦L : ∀ {v t l} → app-sngL v t l ＝ (v ≔ t) $↦L l
+app-sngL-$↦L {l} =
+  ap (λ q → mapₗ (bimap q q) l) (fun-ext λ q → app-sng-$↦ {q = q})
+
+-- TODO decompose
 wf-sub-insert : ∀ {ctx su v t}
               → wf-tm (rem v ctx) t
               → v ∈ ctx
@@ -95,17 +113,18 @@ data UnifyFailure : List Constr → 𝒰 where
   app-con     : ∀ {l r s lc}
               → UnifyFailure ((l ⟶ r , con s) ∷ lc)
   -- recursive propagation
-  arr-arr     : ∀ {l l' r r' lc}
+  arrarr-rec  : ∀ {l l' r r' lc}
               → UnifyFailure ((l , l') ∷ (r , r') ∷ lc)
               → UnifyFailure ((l ⟶ r , l' ⟶ r') ∷ lc)
-  constr-rec  : ∀ {t t' l}
+  eq-rec      : ∀ {t t' l}
+              → t ＝ t'
               → UnifyFailure l
               → UnifyFailure ((t , t') ∷ l)
   subs-rec-l  : ∀ {v t l}
-              → UnifyFailure ((v ≔ t) $↦L l)
+              → UnifyFailure (app-sngL v t l)
               → UnifyFailure ((`` v , t) ∷ l)
   subs-rec-r  : ∀ {v t l}
-              → UnifyFailure ((v ≔ t) $↦L l)
+              → UnifyFailure (app-sngL v t l)
               → UnifyFailure ((t , `` v) ∷ l)
 
 failure→no-unifier : ∀ {lc} → UnifyFailure lc → ↦𝒫∅ (unifier lc)
@@ -119,14 +138,20 @@ failure→no-unifier (con-con-sym ne)       s u =
   ne (con-inj (all-head u))
 failure→no-unifier  con-app        s u = ⟶≠con (all-head u ⁻¹)
 failure→no-unifier  app-con        s u = ⟶≠con (all-head u)
-failure→no-unifier (arr-arr uf)    s u =
+failure→no-unifier (arrarr-rec uf) s u =
   failure→no-unifier uf s (unifier-⟶≃ s $ u)
-failure→no-unifier (constr-rec uf) s u =
+failure→no-unifier (eq-rec _ uf)   s u =
   failure→no-unifier uf s (all-tail u)
 failure→no-unifier (subs-rec-l {l} uf) s u =
-  failure→no-unifier uf s (unifier-subs l (all-head u) (all-tail u))
+  failure→no-unifier uf s $
+  subst (λ q → unifier q s)
+         (app-sngL-$↦L ⁻¹)
+        (unifier-subs l (all-head u) (all-tail u))
 failure→no-unifier (subs-rec-r {l} uf) s u =
-  failure→no-unifier uf s (unifier-subs l (all-head u ⁻¹) (all-tail u))
+  failure→no-unifier uf s $
+  subst (λ q → unifier q s)
+         (app-sngL-$↦L ⁻¹)
+         (unifier-subs l (all-head u ⁻¹) (all-tail u))
 
 -- constraint order
 
@@ -177,99 +202,3 @@ app-lt-constraints {l} {l′} {r} {r′} {lc} =
 
 rem<C : ∀ {c v xs ys} → v ∈ c → (rem v c , xs) <C (c , ys)
 rem<C {v} vi = inl (rem-size-neg vi)
-
--- main algorithm
-
-unify-type : Constrs → 𝒰
-unify-type (ctx , lc) =
-  wf-constr-list ctx lc →
-  (Σ[ s ꞉ SubT ]
-     (Wf-subst ctx (to-sub s) × Max↦ (unifier lc) (to-sub s)))
-  ⊎ UnifyFailure lc
-
-unify-body : (l : Constrs)
-           → (ih : (l' : Constrs) → l' <C l → unify-type l')
-           → unify-type l
-unify-body (ctx , [])                         ih _   = inl ([] , wf-idsub , [] , (λ f′ _ → ≤↦-id {f = f′}))
-unify-body (ctx , (tl , tr) ∷ lc) ih wcl with tl ≟ tr
-unify-body (ctx , (tl , tr) ∷ lc) ih wcl | yes e with ih (ctx , lc)
-                                                         (lt-list-constr-lt-constraints {t = tl} {t′ = tr} {l = lc})
-                                                         (all-tail wcl)
-unify-body (ctx , (tl , tr) ∷ lc) ih wcl | yes e | inl (su , wsu , mx) =
-  inl (su , wsu , (Max↦≃ (unifier-eq e) (to-sub su) $ mx))
-unify-body (ctx , (tl , tr) ∷ lc) ih wcl | yes e | inr uf = inr (constr-rec uf)
-unify-body (ctx , (`` v      , tr)        ∷ lc) ih wcl | no ne with occurs-dec {v} {t = tr}
-unify-body (ctx , (`` v      , tr)        ∷ lc) ih wcl | no ne | yes oc = inr (occ-fail-l (ne ∘ _⁻¹) oc)
-unify-body (ctx , (`` v      , tr)        ∷ lc) ih wcl | no ne | no noc with ih (rem v ctx , (v ≔ tr) $↦L lc)
-                                                                                (rem<C
-                                                                                   {xs = (v ≔ tr) $↦L lc} {ys = (`` v , tr) ∷ lc}
-                                                                                   (wf-tm-var (all-head wcl .fst)))
-                                                                                (wf-constr-list-remove (wf-tm-var (all-head wcl .fst))
-                                                                                                       noc (all-head wcl .snd) (all-tail wcl))
-unify-body (ctx , (`` v      , tr)        ∷ lc) ih wcl | no ne | no noc | inl (su , wsu , mx) =
-  inl ( (v , tr) ∷ su
-      , wf-sub-insert {su = su} (occurs-wf-tm (all-head wcl .snd) noc) (wf-tm-var (all-head wcl .fst)) wsu
-      , (Max↦≃
-           (λ f →   ↦𝒫◇-id≃ {p = ↦𝒫× (unifies (`` v) tr) (unifier lc) } f
-                  ∙ all-×≃ {P = λ where (x , y) → unifies x y f} ⁻¹)
-           (to-sub su ◇ (v ≔ tr)) $
-           optimist-lemma {p = unifies (`` v) tr} {q = unifier lc} {a = id↦}
-                          {f = v ≔ tr} {g = to-sub su}
-              (DCl-unifies {t = tr})
-              (Max↦≃ (_⁻¹ ∘ ↦𝒫◇-id≃ {p = unifies (`` v) tr}) (v ≔ tr) $
-               max-flex-rigid noc)
-              (↦thin-unifier {xs = lc})
-              (subst (λ q → Max↦ (↦𝒫◇ (unifier lc) q) (to-sub su))
-                     (◇-id-r {s = v ≔ tr} ⁻¹) $
-               Max↦≃ (λ s → unifier-append≃) (to-sub su) $ mx)
-               )
-       )
-unify-body (ctx , (`` v      , tr)        ∷ lc) ih wcl | no ne | no noc | inr uf = inr (subs-rec-l uf)
-unify-body (ctx , (pl ⟶ ql , pr ⟶ qr)  ∷ lc) ih wcl | no ne with ih (ctx , (pl , pr) ∷ (ql , qr) ∷ lc)
-                                                                       (app-lt-constraints {l = pl} {l′ = pr} {r = ql} {r′ = qr} {lc = lc})
-                                                                       (  (wf-tm-arr (all-head wcl .fst) .fst , wf-tm-arr (all-head wcl .snd) .fst)
-                                                                        ∷ (wf-tm-arr (all-head wcl .fst) .snd , wf-tm-arr (all-head wcl .snd) .snd)
-                                                                        ∷ all-tail wcl)
-unify-body (ctx , (pl ⟶ ql , pr ⟶ qr)  ∷ lc) ih wcl | no ne | inl (su , wsu , mx) =
-  inl ( su
-      , wsu
-      , (Max↦≃
-           (λ s → (unifier-⟶≃ s) ⁻¹)
-           (to-sub su) $
-           mx)
-      )
-unify-body (ctx , (pl ⟶ ql , pr ⟶ qr)  ∷ lc) ih wcl | no ne | inr uf = inr (arr-arr uf)
-unify-body (ctx , (pl ⟶ ql , con s₂)    ∷ lc) ih wcl | no ne = inr app-con
-unify-body (ctx , (con s₁    , pr ⟶ qr) ∷ lc) ih wcl | no ne = inr con-app
-unify-body (ctx , (con s₁    , con s₂)    ∷ lc) ih wcl | no ne = inr (con-con-sym (contra (ap con) ne))
-unify-body (ctx , (tl        , `` v)      ∷ lc) ih wcl | no ne with occurs-dec {v} {t = tl}
-unify-body (ctx , (tl        , `` v)      ∷ lc) ih wcl | no ne | yes oc = inr (occ-fail-r ne oc)
-unify-body (ctx , (tl        , `` v)      ∷ lc) ih wcl | no ne | no noc with ih (rem v ctx , (v ≔ tl) $↦L lc)
-                                                                                (rem<C
-                                                                                   {xs = (v ≔ tl) $↦L lc} {ys = (tl , `` v) ∷ lc}
-                                                                                   (wf-tm-var (all-head wcl .snd))
-                                                                                   )
-                                                                                (wf-constr-list-remove (wf-tm-var (all-head wcl .snd)) noc (all-head wcl .fst) (all-tail wcl))
-unify-body (ctx , (tl        , `` v)      ∷ lc) ih wcl | no ne | no noc | inl (su , wsu , mx) =
-  inl ((v , tl) ∷ su
-      , wf-sub-insert {su = su} (occurs-wf-tm (all-head wcl .fst) noc) (wf-tm-var (all-head wcl .snd)) wsu
-      , (Max↦≃
-           (λ f →   ↦𝒫◇-id≃ {p = ↦𝒫× (unifies tl (`` v)) (unifier lc) } f
-                  ∙ all-×≃ {P = λ where (x , y) → unifies x y f} ⁻¹)
-           (to-sub su ◇ (v ≔ tl)) $
-           optimist-lemma {p = unifies tl (`` v)} {q = unifier lc} {a = id↦}
-                           {f = v ≔ tl} {g = to-sub su}
-                           (DCl-unifies {s = tl})
-                           (Max↦≃ (λ s → unifies-swap {t = tl} s ∙ (↦𝒫◇-id≃ {p = unifies tl (`` v)} s) ⁻¹)
-                                  (v ≔ tl) $
-                            max-flex-rigid noc)
-                           (↦thin-unifier {xs = lc})
-                           (subst (λ q → Max↦ (↦𝒫◇ (unifier lc) q) (to-sub su))
-                                  (◇-id-r {s = v ≔ tl} ⁻¹) $
-                            Max↦≃ (λ s → unifier-append≃) (to-sub su) $ mx))
-      )
-unify-body (ctx , (tl        , `` v)      ∷ lc) ih wcl | no ne | no noc | inr uf = inr (subs-rec-r uf)
-
-unify : (l : Constrs) → unify-type l
-unify = to-induction <C-wf unify-type unify-body
-

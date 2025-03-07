@@ -118,6 +118,19 @@ wf-tm-var (wf-var x∈) = x∈
 wf-tm-arr : ∀ {c p q} → wf-tm c (p ⟶ q) → wf-tm c p × wf-tm c q
 wf-tm-arr (wf-arr wp wq) = wp , wq
 
+-- TODO drop wf-tm entirely?
+wf-tm-vars : ∀ {c t} → vars t ⊆ c → wf-tm c t
+wf-tm-vars {t = `` x} vs = wf-var (vs (hereₛ refl))
+wf-tm-vars {t = p ⟶ q} vs = wf-arr (wf-tm-vars (vs ∘ ∈ₛ-∪∷←l)) (wf-tm-vars (vs ∘ ∈ₛ-∪∷←r {s₁ = vars p}))
+wf-tm-vars {t = con x} vs = wf-con
+
+{-
+vars-wf-tm : ∀ {c t} → wf-tm c t → vars t ⊆ c
+vars-wf-tm (wf-var x∈) = {!!}
+vars-wf-tm (wf-arr wp wq) = {!!}
+vars-wf-tm wf-con = false! ⦃ Refl-x∉ₛ[] ⦄
+-}
+
 wf-tm-prop : ∀ {v t} → is-prop (wf-tm v t)
 wf-tm-prop (wf-var x∈)     (wf-var y∈)      = ap wf-var (hlevel 1 x∈ y∈)
 wf-tm-prop (wf-arr wp₁ wq₁) (wf-arr wp₂ wq₂) = ap² wf-arr (wf-tm-prop wp₁ wp₂) (wf-tm-prop wq₁ wq₂)

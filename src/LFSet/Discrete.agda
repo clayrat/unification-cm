@@ -113,6 +113,28 @@ instance
     , (λ z∈′ → swap ∙ ap (x ∷_) (ih z∈′)) ]ᵤ (∈ₛ-∷→ z∈)
   go .truncʳ _ = hlevel!
 
+⊆-∪= : ⦃ d : is-discrete A ⦄
+      → {xs ys : LFSet A}
+      → xs ⊆ ys → xs ∪∷ ys ＝ ys
+⊆-∪= {xs} {ys} = elim-prop go xs
+  where
+  go : Elim-prop λ q → q ⊆ ys → q ∪∷ ys ＝ ys
+  go .[]ʳ _ = refl
+  go .∷ʳ x {xs} ih su =
+      ∈ₛ-∷= (∈ₛ-∪∷←r {s₁ = xs} (su (hereₛ refl)))
+    ∙ ih (su ∘ thereₛ)
+  go .truncʳ x = hlevel!
+
+-- lfset extensionality
+
+set-ext : ⦃ is-discrete A ⦄
+        → {xs ys : LFSet A}
+        → ((z : A) → z ∈ xs ≃ z ∈ ys) → xs ＝ ys
+set-ext {xs} {ys} e =
+    ⊆-∪= {xs = ys} (λ {x} x∈ys → e x ⁻¹ $ x∈ys) ⁻¹
+  ∙ ∪∷-comm {x = ys}
+  ∙ ⊆-∪= {xs = xs} (λ {x} x∈xs → e x $ x∈xs)
+
 list-∈ : ⦃ d : is-discrete A ⦄
         → {z : A} {xs : List A} → z ∈ₛ from-list xs → z ∈ xs
 list-∈ {xs = List.[]} x∈ = absurd (∉ₛ[] x∈)
@@ -262,54 +284,6 @@ opaque
   rem-∈-≠ : ⦃ d : is-discrete A ⦄ {z x : A} {s : LFSet A}
            → z ≠ x → z ∈ₛ s → z ∈ₛ rem x s
   rem-∈-≠ z≠x = ∈-filterₛ (false→so! (z≠x ∘ _⁻¹))
-
--- lfset extensionality
--- TODO can we implement an erased variant for non-discrete A ?
-
-set-ext : ⦃ is-discrete A ⦄ → {x y : LFSet A} → ((z : A) → z ∈ x ≃ z ∈ y) → x ＝ y
-set-ext {A} {x} {y} e =
-  elim-prop2 go x y e
-  where
-  go : Elim-prop2 λ u w → ((z : A) → z ∈ u ≃ z ∈ w) → u ＝ w
-  go .[][]ʳ _ = refl
-  go .[]∷ʳ y {ys} ih e = false! ⦃ Refl-x∉ₛ[] ⦄ (e y ⁻¹ $ hereₛ refl)
-  go .∷[]ʳ x {xs} ih e = false! ⦃ Refl-x∉ₛ[] ⦄ (e x $ hereₛ refl)
-  go .∷∷ʳ x y {xs} {ys} ih1 ih2 e with x ∈? xs
-  ... | yes x∈ =
-           ∈ₛ-∷= x∈
-         ∙ ih2 (y ∷ ys) λ z →
-             prop-extₑ! (λ z∈xs → e z $ thereₛ z∈xs)
-                        λ z∈∷ → subst (z ∈_) (∈ₛ-∷= x∈) $
-                                 [ (λ z=y  → e z ⁻¹ $ (hereₛ z=y))
-                                 , (λ z∈′ → e z ⁻¹ $ (thereₛ z∈′))
-                                 ]ᵤ (∈ₛ-∷→ z∈∷)
-  ... | no x∉xs with y ∈? ys
-  ... | yes y∈ys = ih1 (λ z → prop-extₑ!
-                                          (λ z∈∷ → subst (z ∈_) (∈ₛ-∷= y∈ys) $ e z $ z∈∷)
-                                          λ z∈ys → e z ⁻¹ $ thereₛ z∈ys)
-                            ∙ ∈ₛ-∷= y∈ys ⁻¹
-  ... | no y∉ys with x ≟ y
-  ... | yes x=y = ap² {C = λ _ _ → LFSet A} _∷_ x=y
-                      (ih2 ys λ z →
-                                prop-extₑ! (λ z∈xs → ∈ₛ∷-≠
-                                                        (contra (λ z=y → subst (_∈ xs) (z=y ∙ x=y ⁻¹) z∈xs) x∉xs)
-                                                        (e z $ thereₛ z∈xs))
-                                            λ z∈ys → ∈ₛ∷-≠
-                                                        (contra (λ z=x → subst (_∈ ys) (z=x ∙ x=y) z∈ys) y∉ys)
-                                                        (e z ⁻¹ $ thereₛ z∈ys))
-  ... | no x≠y =
-            ap (x ∷_) (ih2 (y ∷ rem x ys) λ z →
-                         prop-extₑ!
-                            (λ z∈xs → [ (λ z=y → hereₛ z=y)
-                                       , (λ z∈ys → thereₛ (rem-∈-≠ (contra (λ z=x → subst (_∈ xs) z=x z∈xs) x∉xs) z∈ys))
-                                       ]ᵤ (∈ₛ-∷→ $ e z $ thereₛ z∈xs) )
-                            λ z∈∷rys → [ (λ z=y → subst (_∈ xs) (z=y ⁻¹) (∈ₛ∷-≠ (x≠y ∘ _⁻¹) (e y ⁻¹ $ hereₛ refl)))
-                                       , (λ z∈rys → let (z≠x , z∈ys) = rem-∈ z∈rys in
-                                                     ∈ₛ∷-≠ z≠x (e z ⁻¹ $ thereₛ z∈ys))
-                                       ]ᵤ (∈ₛ-∷→ z∈∷rys))
-          ∙ swap
-          ∙ ap (y ∷_) (rem-∈-eq (∈ₛ∷-≠ x≠y (e x $ hereₛ refl)))
-  go .truncʳ u w = hlevel!
 
 -- minus and intersection
 

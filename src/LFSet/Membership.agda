@@ -226,6 +226,23 @@ unconsₛ {z} {x} {xs} {B} bp f g z∈∷ =
           , (λ q → ∣ inr (∈ₛ⇉ (sub (⇉∈ₛ (erase q))) .erased) ∣₁) ]ᵤ
           (∈ₛ⇉ x∈ .erased))
 
+⊆-∪=ᴱ : {xs ys : LFSet A}
+       → xs ⊆ ys → Erased (xs ∪∷ ys ＝ ys)
+⊆-∪=ᴱ {xs} {ys} = elim-prop go xs
+  where
+  go : Elim-prop λ q → q ⊆ ys → Erased (q ∪∷ ys ＝ ys)
+  go .[]ʳ _ = erase refl
+  go .∷ʳ x {xs} ih su =
+    erase (  ∈ₛ-∷=ᴱ (∈ₛ-∪∷←r {s₁ = xs} (su (hereₛ refl))) .erased
+           ∙ ih (su ∘ thereₛ) .erased)
+  go .truncʳ x = hlevel!
+
+set-extᴱ : {xs ys : LFSet A} → ((z : A) → z ∈ xs ≃ z ∈ ys) → Erased (xs ＝ ys)
+set-extᴱ {xs} {ys} e =
+  erase (  ⊆-∪=ᴱ {xs = ys} (λ {x} x∈ys → e x ⁻¹ $ x∈ys) .erased ⁻¹
+         ∙ ∪∷-comm {x = ys}
+         ∙ ⊆-∪=ᴱ {xs = xs} (λ {x} x∈xs → e x $ x∈xs) .erased)
+
 ∈-list : {x : A} {xs : List A} → x ∈ xs → x ∈ₛ from-list xs
 ∈-list {xs = x ∷ xs} (here px)  = hereₛ px
 ∈-list {xs = x ∷ xs} (there xi) = thereₛ (∈-list xi)

@@ -69,7 +69,13 @@ elim {A} {P} e = go
   go (drop {x} {xs} i) = E.dropʳ x (go xs) i
   go (swap {x} {y} {xs} i) = E.swapʳ x y (go xs) i
   go (trunc x x′ e₁ e₂ i j) =
-    hetero-UIP E.truncʳ (trunc x x′ e₁ e₂) (λ k → go (e₁ k)) (λ k → go (e₂ k)) i j
+    is-set→squareᴾ
+      (λ i₁ j₁ → E.truncʳ (trunc x x′ e₁ e₂ i₁ j₁))
+      refl
+      (λ k → go (e₁ k))
+      (λ k → go (e₂ k))
+      refl
+      i j
 
 record Rec (A : 𝒰 ℓ) (B : 𝒰 ℓ′) : 𝒰 (ℓ ⊔ ℓ′) where
   no-eta-equality
@@ -88,7 +94,6 @@ rec : Rec A B → LFSet A → B
 rec {B} r = elim go
   where
   module R = Rec r
-
   go : Elim (λ _ → B)
   go .[]ʳ = R.[]ʳ
   go .∷ʳ x {xs} = R.∷ʳ x xs

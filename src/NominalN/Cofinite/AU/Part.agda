@@ -83,7 +83,7 @@ au-θᵏ-body a▹ t ts =
               (map ``_ (gen unfin-ℕ (t ∷ ts)))
               (λ x → pure (`` x))
               (lupST (t ∷ ts) s))
-        (λ where (p , ps , q , qs) →
+        (λ where ((p , ps) , (q , qs)) →
                    later ((λ p′ q′ → p′ >>=ᵏ λ pm →
                                      q′ >>=ᵏ λ qm →
                                      now (do pt ← pm

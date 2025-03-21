@@ -372,6 +372,19 @@ opaque
   mapₛ-[] : {f : A → B} → mapₛ f [] ＝ []
   mapₛ-[] = refl
 
+  mapₛ-∷ : {f : A → B} {x : A} {xs : LFSet A}
+         → mapₛ f (x ∷ xs) ＝ f x ∷ mapₛ f xs
+  mapₛ-∷ = refl
+
+  mapₛ-∪∷ : {f : A → B} {xs ys : LFSet A}
+          → mapₛ f (xs ∪∷ ys) ＝ mapₛ f xs ∪∷ mapₛ f ys
+  mapₛ-∪∷ {f} {xs} {ys} = elim-prop go xs
+     where
+       go : Elim-prop λ q → mapₛ f (q ∪∷ ys) ＝ mapₛ f q ∪∷ mapₛ f ys
+       go .[]ʳ = refl
+       go .∷ʳ x {xs} ih = ap (f x ∷_) ih
+       go .truncʳ = hlevel!
+
 opaque
   bindₛ : (A → LFSet B) → LFSet A → LFSet B
   bindₛ {A} {B} f = rec go
@@ -381,6 +394,22 @@ opaque
       go .∷ʳ x _ ys = f x ∪∷ ys
       go .dropʳ x xs ys = ∪∷-assoc (f x) ∙ ap (_∪∷ ys) (∪∷-idem {x = f x})
       go .swapʳ x y xs ys = ∪∷-assoc {y = f y} (f x) ∙ ap (_∪∷ ys) (∪∷-comm {x = f x}) ∙ ∪∷-assoc (f y) ⁻¹
+      go .truncʳ = hlevel!
+
+  bindₛ-[] : {f : A → LFSet B} → bindₛ f [] ＝ []
+  bindₛ-[] = refl
+
+  bindₛ-∷ : {f : A → LFSet B} {x : A} {xs : LFSet A}
+         → bindₛ f (x ∷ xs) ＝ f x ∪∷ bindₛ f xs
+  bindₛ-∷ = refl
+
+  bindₛ-∪∷ : {f : A → LFSet B} {xs ys : LFSet A}
+          → bindₛ f (xs ∪∷ ys) ＝ bindₛ f xs ∪∷ bindₛ f ys
+  bindₛ-∪∷ {f} {xs} {ys} = elim-prop go xs
+    where
+      go : Elim-prop λ q → bindₛ f (q ∪∷ ys) ＝ bindₛ f q ∪∷ bindₛ f ys
+      go .[]ʳ = refl
+      go .∷ʳ x {xs} ih = ap (f x ∪∷_) ih ∙ ∪∷-assoc (f x)
       go .truncʳ = hlevel!
 
 opaque
@@ -396,6 +425,29 @@ opaque
       go .swapʳ x y xs r = ∪-assoc ∙ ap (_∪ r) ∪-comm ∙ ∪-assoc ⁻¹
       go .truncʳ = Poset.ob-is-set A
 
+  joinₛ-[] : {o ℓ : Level} {A : Poset o ℓ} {js : is-join-semilattice A}
+            (open is-join-semilattice js)   -- wut
+          → joinₛ {js = js} [] ＝ ⊥
+  joinₛ-[] = refl
+
+  joinₛ-∷ : {o ℓ : Level} {A : Poset o ℓ} {js : is-join-semilattice A}
+            (open is-join-semilattice js)   -- wut
+            {x : Poset.Ob A} {xs : LFSet (Poset.Ob A)}
+          → joinₛ {js = js} (x ∷ xs) ＝ x ∪ joinₛ {js = js} xs
+  joinₛ-∷ = refl
+
+  joinₛ-∪∷ : {o ℓ : Level} {A : Poset o ℓ} {js : is-join-semilattice A}
+             (open is-join-semilattice js)   -- wut
+             {xs ys : LFSet (Poset.Ob A)}
+           → joinₛ {js = js} (xs ∪∷ ys) ＝ joinₛ {js = js} xs ∪ joinₛ {js = js} ys
+  joinₛ-∪∷ {js} {xs} {ys} = elim-prop go xs
+    where
+      open is-join-semilattice js
+      go : Elim-prop λ q → joinₛ {js = js} (q ∪∷ ys) ＝ joinₛ {js = js} q ∪ joinₛ {js = js} ys
+      go .[]ʳ = ∪-id-l ⦃ b = has-bottom ⦄ ⁻¹
+      go .∷ʳ x {xs} ih = ap (x ∪_) ih ∙ ∪-assoc
+      go .truncʳ = hlevel!
+
 opaque
   meetₛ : {o ℓ : Level} {A : Poset o ℓ} {ms : is-meet-semilattice A}
         → LFSet (Poset.Ob A) → Poset.Ob A
@@ -408,6 +460,30 @@ opaque
       go .dropʳ x y r = ∩-assoc ∙ ap (_∩ r) ∩-idem
       go .swapʳ x y xs r = ∩-assoc ∙ ap (_∩ r) ∩-comm ∙ ∩-assoc ⁻¹
       go .truncʳ = Poset.ob-is-set A
+
+  meetₛ-[] : {o ℓ : Level} {A : Poset o ℓ} {ms : is-meet-semilattice A}
+            (open is-meet-semilattice ms)   -- wut
+          → meetₛ {ms = ms} [] ＝ ⊤
+  meetₛ-[] = refl
+
+  meetₛ-∷ : {o ℓ : Level} {A : Poset o ℓ} {ms : is-meet-semilattice A}
+            (open is-meet-semilattice ms)   -- wut
+            {x : Poset.Ob A} {xs : LFSet (Poset.Ob A)}
+          → meetₛ {ms = ms} (x ∷ xs) ＝ x ∩ meetₛ {ms = ms} xs
+  meetₛ-∷ = refl
+
+  meetₛ-∪∷ : {o ℓ : Level} {A : Poset o ℓ} {ms : is-meet-semilattice A}
+             (open is-meet-semilattice ms)   -- wut
+             {xs ys : LFSet (Poset.Ob A)}
+           → meetₛ {ms = ms} (xs ∪∷ ys) ＝ meetₛ {ms = ms} xs ∩ meetₛ {ms = ms} ys
+  meetₛ-∪∷ {ms} {xs} {ys} = elim-prop go xs
+    where
+      open is-meet-semilattice ms -- renaming (has-top to has-topm)
+      go : Elim-prop λ q → meetₛ {ms = ms} (q ∪∷ ys) ＝ meetₛ {ms = ms} q ∩ meetₛ {ms = ms} ys
+      go .[]ʳ = ∩-id-l ⦃ t = has-top ⦄ ⁻¹
+      go .∷ʳ x {xs} ih = ap (x ∩_) ih ∙ ∩-assoc
+      go .truncʳ = hlevel!
+
 
 from-list : List A → LFSet A
 from-list = List.rec [] _∷_

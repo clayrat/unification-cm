@@ -11,6 +11,7 @@ open import Data.Nat
 open import Data.Nat.Order.Base
 open import Data.Char
 open import Data.List
+open import Data.Maybe
 open import Data.String
 
 open import Order.Strict
@@ -111,6 +112,14 @@ instance
   H-Level-Term = hlevel-basic-instance 2 (is-discrete→is-set auto)
   {-# OVERLAPPING H-Level-Term #-}
 
+is-⟶ : Term → Bool
+is-⟶ (p ⟶ q) = true
+is-⟶ _        = false
+
+⟶-split : Term → Maybe (Term × Term)
+⟶-split (p ⟶ q) = just (p , q)
+⟶-split _        = nothing
+
 tm-size : Term → ℕ
 tm-size (p ⟶ q) = suc (tm-size p + tm-size q)
 tm-size _        = 1
@@ -127,3 +136,9 @@ vars (`` x)    = x ∷ []
 vars (p ⟶ q) = vars p ∪∷ vars q
 vars (con _)   = []
 
+-- syms
+
+syms : Term → LFSet Sy
+syms (`` _)    = []
+syms (p ⟶ q) = syms p ∪∷ syms q
+syms (con s)   = s ∷ []

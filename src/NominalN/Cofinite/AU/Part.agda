@@ -84,13 +84,12 @@ au-θᵏ-body a▹ t ts =
               (λ x → pure (`` x))
               (lupST (t ∷ ts) s))
         (λ where ((p , ps) , (q , qs)) →
-                   later ((λ p′ q′ → p′ >>=ᵏ λ pm →
-                                     q′ >>=ᵏ λ qm →
-                                     now (do pt ← pm
-                                             qt ← qm
-                                             pure (pt ⟶ qt)))
-                         ⍉ (a▹ ⊛ next p ⊛ next ps)
-                         ⊛ (a▹ ⊛ next q ⊛ next qs)))
+                   later (map²ᵏ {A = State _ _}
+                                (λ p′ q′ → do pt ← p′
+                                              qt ← q′
+                                              pure (pt ⟶ qt))
+                          ⍉ (a▹ ⊛ next p ⊛ next ps)
+                          ⊛ (a▹ ⊛ next q ⊛ next qs)))
         (uncouple t ts)
 
 au-θᵏ : Term → List Term → gPart κ (State (Id × SubT (List Term) Id) Term)

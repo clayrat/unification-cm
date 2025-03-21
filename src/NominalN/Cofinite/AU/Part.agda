@@ -102,7 +102,7 @@ au-θ t ts κ = au-θᵏ t ts
 au : List Term → Maybe (Part Term)
 au []       = nothing
 au (t ∷ ts) =
-  let vs = bindₛ vars (from-list ts)
+  let vs = bindₛ vars (from-list (t ∷ ts))
       (t′ , ts′ , s) = pre-process t ts
       is = invST s
     in

@@ -40,13 +40,9 @@ unzip-with f (a ∷ as) =
   ((b ∷_) × (c ∷_)) $ unzip-with f as
 -}
 
-unzip-with-m : (A → Maybe (B × C)) → List A -> Maybe (List B × List C)
-unzip-with-m f as =
-  map unzip $ traverse f as
-
 uncouple : Term → List Term → Maybe (Term × List Term × Term × List Term)
 uncouple (p ⟶ q) ts =
-  map (λ where (ps , qs) → p , ps , q , qs) (unzip-with-m ⟶-split ts)
+  map (λ where (ps , qs) → p , ps , q , qs) (map unzip $ traverse ⟶-split ts)
 uncouple _         _ = nothing
 
 -- computational substitution

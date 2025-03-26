@@ -24,6 +24,7 @@ open import Order.Constructions.Lex
 open import LFSet
 open import LFSet.Membership
 open import LFSet.Discrete
+open import SubC
 
 open import Id
 open import NominalN.Term
@@ -33,66 +34,28 @@ open import NominalN.Cofinite.Unifier
 
 -- Naive Martelli-Montanari algorithm
 
--- computational (triangular) substitution
+-- properties of computational substitution
 
-SubT : 𝒰
-SubT = List (Id × Term)
+opaque
+  unfolding SubC
+  to-sub : SubC Id Term → Sub
+  to-sub = List.rec id↦ (λ where (x , t) → _◇ (x ≔ t))
 
-to-sub : SubT → Sub
-to-sub = List.rec id↦ (λ where (x , t) → _◇ (x ≔ t))
+  to-sub-emp : to-sub empS ＝ id↦
+  to-sub-emp = sub-ext (fun-ext λ x → refl) refl
 
-app-sng : Id → Term → Term → Term
-app-sng v t (`` x)    = if v == x then t else `` x
-app-sng v t (p ⟶ q) = app-sng v t p ⟶ app-sng v t q
-app-sng v t (con s)   = con s
+  to-sub-ins : ∀ {v t su}
+             → to-sub (insS v t su) ＝ to-sub su ◇ (v ≔ t)
+  to-sub-ins = sub-ext (fun-ext λ x → refl) refl
 
-app-sngL : Id → Term → List Constr → List Constr
-app-sngL v t = map (bimap (app-sng v t) (app-sng v t))
+-- constraint substitution
 
-app-sng-$↦ : ∀ {v t q} → app-sng v t q ＝ (v ≔ t) $↦ q
-app-sng-$↦ {q = `` x}    = refl
-app-sng-$↦ {q = p ⟶ q} = ap² _⟶_ (app-sng-$↦ {q = p}) (app-sng-$↦ {q = q})
-app-sng-$↦ {q = con s}   = refl
+subs1 : Id → Term → List Constr → List Constr
+subs1 v t = map (bimap (sub1 v t) (sub1 v t))
 
-app-sngL-$↦L : ∀ {v t l} → app-sngL v t l ＝ (v ≔ t) $↦L l
-app-sngL-$↦L {l} =
-  ap (λ q → mapₗ (bimap q q) l) (fun-ext λ q → app-sng-$↦ {q = q})
-
--- TODO decompose
-wf-sub-insert : ∀ {ctx su v t}
-              → wf-tm (rem v ctx) t
-              → v ∈ ctx
-              → Wf-subst (rem v ctx) (to-sub su)
-              → Wf-subst ctx (to-sub ((v , t) ∷ su))
-wf-sub-insert {ctx} {su} {v} {t} wr vin wf {x} xin =
-  caseᵈ v ＝ x of
-    λ where
-       (yes v=x) →
-           subst (_∈ ctx) v=x vin
-         , (given-yes v=x
-              return (λ q → wf-tm (minus ctx (v ∷ to-sub su .dom))
-                                  (to-sub su $↦ (if ⌊ q ⌋ then t else `` x)))
-              then subst (λ q → wf-tm q (to-sub su $↦ t))
-                         (minus-rem-l ∙ minus-∷-r ⁻¹)
-                         (substs-remove wf wr))
-       (no v≠x) →
-            Recomputable-×
-             Recomputable-∈ₛ (wf-tm-recomp {t = to-sub ((v , t) ∷ su) $ x})
-             .recompute $
-               erase
-                (elim! {P = λ _ → (x ∈ₛ ctx)
-                                    ×ₜ wf-tm (minus ctx (v ∷ to-sub su .dom))
-                                             (to-sub ((v , t) ∷ su) $ x)}
-                   [ (λ e → absurd (v≠x (e ⁻¹)))
-                   , (λ x∈′ → let (x∈r , wtx) = wf (⇉∈ₛ $ erase x∈′) in
-                                 rem-⊆ x∈r
-                               , (given-no v≠x
-                             return (λ q → wf-tm (minus ctx (v ∷ to-sub su .dom))
-                                                 (to-sub su $↦ (if ⌊ q ⌋ then t else `` x)))
-                             then subst (λ q → wf-tm q (to-sub su $ x))
-                                        (minus-rem-l ∙ minus-∷-r ⁻¹)
-                                        wtx))
-                   ]ᵤ (∈ₛ⇉ xin .erased))
+subs1-$↦L : ∀ {v t l} → subs1 v t l ＝ (v ≔ t) $↦L l
+subs1-$↦L {l} =
+  ap (λ q → mapₗ (bimap q q) l) (fun-ext λ q → sub1-$↦ {q = q})
 
 -- failure
 
@@ -121,10 +84,10 @@ data UnifyFailure : List Constr → 𝒰 where
               → UnifyFailure l
               → UnifyFailure ((t , t') ∷ l)
   subs-rec-l  : ∀ {v t l}
-              → UnifyFailure (app-sngL v t l)
+              → UnifyFailure (subs1 v t l)
               → UnifyFailure ((`` v , t) ∷ l)
   subs-rec-r  : ∀ {v t l}
-              → UnifyFailure (app-sngL v t l)
+              → UnifyFailure (subs1 v t l)
               → UnifyFailure ((t , `` v) ∷ l)
 
 failure→no-unifier : ∀ {lc} → UnifyFailure lc → ↦𝒫∅ (unifier lc)
@@ -145,12 +108,12 @@ failure→no-unifier (eq-rec _ uf)   s u =
 failure→no-unifier (subs-rec-l {l} uf) s u =
   failure→no-unifier uf s $
   subst (λ q → unifier q s)
-         (app-sngL-$↦L ⁻¹)
+         (subs1-$↦L ⁻¹)
         (unifier-subs l (all-head u) (all-tail u))
 failure→no-unifier (subs-rec-r {l} uf) s u =
   failure→no-unifier uf s $
   subst (λ q → unifier q s)
-         (app-sngL-$↦L ⁻¹)
+         (subs1-$↦L ⁻¹)
          (unifier-subs l (all-head u ⁻¹) (all-tail u))
 
 -- constraint order

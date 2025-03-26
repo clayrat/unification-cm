@@ -120,6 +120,15 @@ is-⟶ _        = false
 ⟶-split (p ⟶ q) = just (p , q)
 ⟶-split _        = nothing
 
+⟶-split=just : ∀ {t p q}
+               → ⟶-split t ＝ just (p , q)
+               → t ＝ p ⟶ q
+⟶-split=just {t = `` _} e = false! e
+⟶-split=just {t = p′ ⟶ q′} e =
+  let pqeq = ×-path-inv $ just-inj e in
+  ap² _⟶_ (pqeq .fst) (pqeq .snd)
+⟶-split=just {t = con _} e = false! e
+
 tm-size : Term → ℕ
 tm-size (p ⟶ q) = suc (tm-size p + tm-size q)
 tm-size _        = 1
@@ -128,6 +137,13 @@ tm-size _        = 1
 0<tm-size {t = `` _}    = z<s
 0<tm-size {t = _ ⟶ _} = z<s
 0<tm-size {t = con s}   = z<s
+
+-- substitution
+
+sub1 : Id → Term → Term → Term
+sub1 v t (`` x)    = if v == x then t else `` x
+sub1 v t (p ⟶ q) = sub1 v t p ⟶ sub1 v t q
+sub1 v t (con s)   = con s
 
 -- vars
 

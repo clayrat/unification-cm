@@ -18,7 +18,7 @@ private variable
   B : 𝒰 ℓᵇ
   C : 𝒰 ℓᶜ
 
-opaque 
+opaque
   State : 𝒰 ℓˢ → 𝒰 ℓᵃ → 𝒰 (ℓˢ ⊔ ℓᵃ)
   State S A = S → A × S
 
@@ -32,13 +32,13 @@ opaque
   st-ap sab sa s =
     let (ab , s′) = sab s
         (b , s″) = sa s′
-      in 
+      in
     (ab b) , s″
 
   st-bind : (A → State S B) → State S A → State S B
   st-bind asb sa s =
     let (a , s′) = sa s
-      in 
+      in
     asb a s′
 
   -- derived
@@ -48,7 +48,7 @@ opaque
 
   st-gets : (S → A) → State S A
   st-gets f s = f s , s
- 
+
   st-put : S → State S ⊤
   st-put s _ = tt , s
 
@@ -68,7 +68,7 @@ opaque
   execState sa s = snd (sa s)
 
   -- laws
-  
+
   st-map-pres-id : {S : 𝒰 ℓˢ} {A : 𝒰 ℓᵃ}
                  → st-map {A = A} {S = S} id ＝ id
   st-map-pres-id = refl
@@ -83,12 +83,12 @@ opaque
              → st-ap (st-pure id) v ＝ v
   st-pure-id = refl
 
-  st-pure-pres-ap : {S : 𝒰 ℓˢ} {A : 𝒰 ℓᵃ} {B : 𝒰 ℓᵇ} 
+  st-pure-pres-ap : {S : 𝒰 ℓˢ} {A : 𝒰 ℓᵃ} {B : 𝒰 ℓᵇ}
                     {f : A → B} {x : A}
                    → st-ap {S = S} (st-pure f) (st-pure x) ＝ st-pure (f x)
   st-pure-pres-ap = refl
 
-  st-pure-interchange : {S : 𝒰 ℓˢ} {A : 𝒰 ℓᵃ} {B : 𝒰 ℓᵇ} 
+  st-pure-interchange : {S : 𝒰 ℓˢ} {A : 𝒰 ℓᵃ} {B : 𝒰 ℓᵇ}
                         {u : State S (A → B)} {v : A}
                       → st-ap {S = S} u (st-pure v) ＝ st-ap {S = S} (st-pure (_$ v)) u
   st-pure-interchange = refl
@@ -99,7 +99,7 @@ opaque
   st-pure-comp = refl
 
   st-map-pure : {S : 𝒰 ℓˢ} {A : 𝒰 ℓᵃ} {B : 𝒰 ℓᵇ}
-                {f : A → B} 
+                {f : A → B}
                → st-map {S = S} f ＝ λ x → st-ap (st-pure f) x
   st-map-pure = refl
 
@@ -108,7 +108,7 @@ opaque
                → st-bind f (st-pure x) ＝ f x
   st-bind-id-l = refl
 
-  st-bind-id-r : {S : 𝒰 ℓˢ} {A : 𝒰 ℓᵃ} 
+  st-bind-id-r : {S : 𝒰 ℓˢ} {A : 𝒰 ℓᵃ}
                  {mx : State S A}
                → st-bind st-pure mx ＝ mx
   st-bind-id-r = refl
@@ -131,14 +131,14 @@ opaque
 
   runState-ap : {S : 𝒰 ℓˢ} {A : 𝒰 ℓᵃ} {B : 𝒰 ℓᵇ} {f : State S (A → B)} {x : State S A} {s : S}
               → runState (st-ap f x) s ＝ let (ab , s′) = runState f s in
-                                          let (b , s″)  = runState x s′ in 
+                                          let (b , s″)  = runState x s′ in
                                           (ab b) , s″
   runState-ap = refl
 
   eval-run : {S : 𝒰 ℓˢ} {A : 𝒰 ℓᵃ} {x : State S A} {s : S}
            → evalState x s ＝ (runState x s) .fst
   eval-run = refl
-  
+
 instance
   Map-State : Map (eff (State S))
   Map-State .map = st-map
@@ -153,7 +153,7 @@ instance
 
   Lawful-Idiom-State : Lawful-Idiom (eff (State S))
   Lawful-Idiom-State .has-lawful-map = Lawful-Map-State
-  Lawful-Idiom-State .pure-id = st-pure-id
+--  Lawful-Idiom-State .pure-id = st-pure-id
   Lawful-Idiom-State .pure-pres-app = st-pure-pres-ap
   Lawful-Idiom-State .pure-interchange = st-pure-interchange
   Lawful-Idiom-State .pure-comp = st-pure-comp
@@ -166,14 +166,14 @@ instance
   Lawful-Bind-State .has-lawful-idiom = Lawful-Idiom-State
   Lawful-Bind-State .>>=-id-l = st-bind-id-l
   Lawful-Bind-State .>>=-id-r = st-bind-id-r
-  Lawful-Bind-State .>>=-assoc = st-bind-assoc 
+  Lawful-Bind-State .>>=-assoc = st-bind-assoc
   Lawful-Bind-State .<*>->>= = st-ap-bind
 
 opaque
   -- TODO is there a more generic way?
 
   runState-traverse-length : {S : 𝒰 ℓˢ} {A : 𝒰 ℓᵃ} {B : 𝒰 ℓᵇ}
-                             {f : A → State S B} {s : S} {xs : List A} 
+                             {f : A → State S B} {s : S} {xs : List A}
                            → length xs ＝ length (evalState (traverse f xs) s)
   runState-traverse-length {f} {s} {xs = []}     = ap length (ap fst (runState-pure ⁻¹) ∙ eval-run ⁻¹)
   runState-traverse-length {f} {s} {xs = x ∷ xs} =

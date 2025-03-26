@@ -478,7 +478,7 @@ opaque
            → meetₛ {ms = ms} (xs ∪∷ ys) ＝ meetₛ {ms = ms} xs ∩ meetₛ {ms = ms} ys
   meetₛ-∪∷ {ms} {xs} {ys} = elim-prop go xs
     where
-      open is-meet-semilattice ms -- renaming (has-top to has-topm)
+      open is-meet-semilattice ms
       go : Elim-prop λ q → meetₛ {ms = ms} (q ∪∷ ys) ＝ meetₛ {ms = ms} q ∩ meetₛ {ms = ms} ys
       go .[]ʳ = ∩-id-l ⦃ t = has-top ⦄ ⁻¹
       go .∷ʳ x {xs} ih = ap (x ∩_) ih ∙ ∩-assoc

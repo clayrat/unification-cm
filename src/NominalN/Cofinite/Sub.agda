@@ -100,6 +100,11 @@ codom s = mapₛ (s .fun) (s .dom)
 
 -- interaction lemmas
 
+sub1-$↦ : ∀ {v t q} → sub1 v t q ＝ (v ≔ t) $↦ q
+sub1-$↦ {q = `` x}    = refl
+sub1-$↦ {q = p ⟶ q} = ap² _⟶_ (sub1-$↦ {q = p}) (sub1-$↦ {q = q})
+sub1-$↦ {q = con s}   = refl
+
 sub-id : ∀ {t} → id↦ $↦ t ＝ t
 sub-id {t = `` x}    = refl
 sub-id {t = p ⟶ q} = ap² _⟶_ (sub-id {t = p}) (sub-id {t = q})
@@ -337,7 +342,8 @@ substs-remove         ws (wf-arr wp wq) = wf-arr (substs-remove ws wp) (substs-r
 substs-remove         ws  wf-con        = wf-con
 
 wf-sub-◇ : ∀ {c s1 s2}
-          → Wf-subst c s1 → Wf-subst (minus c (s1 .dom)) s2
+          → Wf-subst c s1
+          → Wf-subst (minus c (s1 .dom)) s2
           → Wf-subst c (s2 ◇ s1)
 wf-sub-◇ {c} {s1} {s2} ws1 ws2 {x} x∈∪∷ with x ∈? s1 .dom
 ... | yes xi1 =

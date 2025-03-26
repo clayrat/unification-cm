@@ -31,6 +31,7 @@ open import Clocked.Partial.All
 open import LFSet
 open import LFSet.Membership
 open import LFSet.Discrete
+open import SubC
 
 open import Id
 open import NominalN.Term
@@ -43,9 +44,9 @@ private variable
   κ : Cl
 
 mutual
-  unifyᵏ-body : ▹ κ ((lc : List Constr) → gPart κ (SubT ⊎ UnifyFailure lc))
-              → (lc : List Constr) → gPart κ (SubT ⊎ UnifyFailure lc)
-  unifyᵏ-body u▹ []               = now (inl [])
+  unifyᵏ-body : ▹ κ ((lc : List Constr) → gPart κ (SubC Id Term ⊎ UnifyFailure lc))
+              → (lc : List Constr) → gPart κ (SubC Id Term ⊎ UnifyFailure lc)
+  unifyᵏ-body u▹ []               = now (inl empS)
   unifyᵏ-body u▹ ((tl , tr) ∷ lc) =
     Dec.rec
       (λ e → let ih▹ = u▹ ⊛ next lc in
@@ -53,20 +54,20 @@ mutual
       (λ ne → unifyᵏ-body-head u▹ tl tr ne lc)
       (tl ≟ tr)
 
-  unifyᵏ-body-head : ▹ κ ((lc : List Constr) → gPart κ (SubT ⊎ UnifyFailure lc))
+  unifyᵏ-body-head : ▹ κ ((lc : List Constr) → gPart κ (SubC Id Term ⊎ UnifyFailure lc))
                    → (tl tr : Term) → tl ≠ tr
-                   → (lc : List Constr) → gPart κ (SubT ⊎ UnifyFailure ((tl , tr) ∷ lc))
+                   → (lc : List Constr) → gPart κ (SubC Id Term ⊎ UnifyFailure ((tl , tr) ∷ lc))
   unifyᵏ-body-head u▹ (`` v)       tr        ne lc =
     Dec.rec
       (λ oc → now (inr (occ-fail-l (ne ∘ _⁻¹) oc)))
-      (λ _ → let ih▹ = u▹ ⊛ next (app-sngL v tr lc) in
-             later (mapᵏ (⊎.dmap ((v , tr) ∷_) subs-rec-l) ⍉ ih▹))
+      (λ _ → let ih▹ = u▹ ⊛ next (subs1 v tr lc) in
+             later (mapᵏ (⊎.dmap (insS v tr) subs-rec-l) ⍉ ih▹))
       (occurs-dec {v} {t = tr})
   unifyᵏ-body-head u▹  tl         (`` v)     ne lc =
     Dec.rec
       (λ oc → now (inr (occ-fail-r ne oc)))
-      (λ _ → let ih▹ = u▹ ⊛ next (app-sngL v tl lc) in
-             later (mapᵏ (⊎.dmap ((v , tl) ∷_) subs-rec-r) ⍉ ih▹))
+      (λ _ → let ih▹ = u▹ ⊛ next (subs1 v tl lc) in
+             later (mapᵏ (⊎.dmap (insS v tl) subs-rec-r) ⍉ ih▹))
       (occurs-dec {v} {t = tl})
   unifyᵏ-body-head u▹ (pl ⟶ ql) (pr ⟶ qr) ne lc =
     let ih▹ = u▹ ⊛ next ((pl , pr) ∷ (ql , qr) ∷ lc) in
@@ -75,10 +76,10 @@ mutual
   unifyᵏ-body-head u▹ (pl ⟶ ql) (con sr)    ne lc = now (inr app-con)
   unifyᵏ-body-head u▹ (con sl)    (con sr)   ne lc = now (inr (con-con-sym (contra (ap con) ne)))
 
-unifyᵏ : (lc : List Constr) → gPart κ (SubT ⊎ UnifyFailure lc)
+unifyᵏ : (lc : List Constr) → gPart κ (SubC Id Term ⊎ UnifyFailure lc)
 unifyᵏ = fix unifyᵏ-body
 
-unify : (lc : List Constr) → Part (SubT ⊎ UnifyFailure lc)
+unify : (lc : List Constr) → Part (SubC Id Term ⊎ UnifyFailure lc)
 unify lc κ = unifyᵏ lc
 
 -- properties
@@ -118,7 +119,7 @@ wcl-constr-vars {cs} =
 unify⇓-body : ∀ (l : Constrs)
             → ((l' : Constrs) → l' <C l → wf-constr-list (l' .fst) (l' .snd) → (unify (l' .snd)) ⇓)
             → wf-constr-list (l .fst) (l .snd) → (unify (l .snd)) ⇓
-unify⇓-body (ctx , []) ih wcl = (inl []) , ∣ 0 , refl ∣₁
+unify⇓-body (ctx , []) ih wcl = (inl empS) , ∣ 0 , refl ∣₁
 unify⇓-body (ctx , (tl , tr) ∷ lc) ih wcl with tl ≟ tr
 unify⇓-body (ctx , (tl , tr) ∷ lc) ih wcl | yes e =
   let (res , cnv) = ih (ctx , lc)
@@ -139,22 +140,22 @@ unify⇓-body (ctx , ((`` v)      , tr)         ∷ lc) ih wcl | no ne with occu
 unify⇓-body (ctx , ((`` v)      , tr)         ∷ lc) ih wcl | no ne | yes oc =
   inr (occ-fail-l (ne ∘ _⁻¹) oc) , ∣ 0 , refl ∣₁
 unify⇓-body (ctx , ((`` v)      , tr)         ∷ lc) ih wcl | no ne | no noc =
-  let (res , cnv) = ih (rem v ctx , app-sngL v tr lc)
-                       (rem<C {xs = app-sngL v tr lc} {ys = (`` v , tr) ∷ lc}
+  let (res , cnv) = ih (rem v ctx , subs1 v tr lc)
+                       (rem<C {xs = subs1 v tr lc} {ys = (`` v , tr) ∷ lc}
                               (wf-tm-var (all-head wcl .fst)))
                        (subst (wf-constr-list (rem v ctx))
-                              (app-sngL-$↦L ⁻¹) $
+                              (subs1-$↦L ⁻¹) $
                         wf-constr-list-remove (wf-tm-var (all-head wcl .fst))
                                               noc (all-head wcl .snd) (all-tail wcl))
     in
-    ⊎.dmap ((v , tr) ∷_) subs-rec-l res
+    ⊎.dmap (insS v tr) subs-rec-l res
   , map (λ where
              (k , eq) →
                  suc k
                , fun-ext λ κ →
-                     ap (mapᵏ (⊎.dmap ((v , tr) ∷_) subs-rec-l) ∘ later)
-                        (▹-ext λ α → happly (▹-ap (pfix {k = κ} unifyᵏ-body) α) ((app-sngL v tr lc)))
-                   ∙ ap (mapᵏ (⊎.dmap ((v , tr) ∷_) subs-rec-l) ∘ δᵏ) (happly eq κ)
+                     ap (mapᵏ (⊎.dmap (insS v tr) subs-rec-l) ∘ later)
+                        (▹-ext λ α → happly (▹-ap (pfix {k = κ} unifyᵏ-body) α) ((subs1 v tr lc)))
+                   ∙ ap (mapᵏ (⊎.dmap (insS v tr) subs-rec-l) ∘ δᵏ) (happly eq κ)
                    ∙ delay-by-mapᵏ res (suc k))
         cnv
 -- ugh
@@ -162,22 +163,22 @@ unify⇓-body (ctx , ((pl ⟶ ql) , (`` v))     ∷ lc) ih wcl | no ne with occu
 unify⇓-body (ctx , ((pl ⟶ ql) , (`` v))     ∷ lc) ih wcl | no ne | yes oc =
   inr (occ-fail-r ne oc) , ∣ 0 , refl ∣₁
 unify⇓-body (ctx , ((pl ⟶ ql) , (`` v))     ∷ lc) ih wcl | no ne | no noc =
-  let (res , cnv) = ih (rem v ctx , app-sngL v (pl ⟶ ql) lc)
-                       (rem<C {xs = app-sngL v (pl ⟶ ql) lc} {ys = (pl ⟶ ql , `` v) ∷ lc}
+  let (res , cnv) = ih (rem v ctx , subs1 v (pl ⟶ ql) lc)
+                       (rem<C {xs = subs1 v (pl ⟶ ql) lc} {ys = (pl ⟶ ql , `` v) ∷ lc}
                           (wf-tm-var (all-head wcl .snd)))
                        (subst (wf-constr-list (rem v ctx))
-                              (app-sngL-$↦L ⁻¹) $
+                              (subs1-$↦L ⁻¹) $
                         wf-constr-list-remove (wf-tm-var (all-head wcl .snd))
                                               noc (all-head wcl .fst) (all-tail wcl))
     in
-    ⊎.dmap ((v , pl ⟶ ql) ∷_) subs-rec-r res
+    ⊎.dmap (insS v (pl ⟶ ql)) subs-rec-r res
   , map (λ where
              (k , eq) →
                  suc k
                , fun-ext λ κ →
-                     ap (mapᵏ (⊎.dmap ((v , pl ⟶ ql) ∷_) subs-rec-r) ∘ later)
-                        (▹-ext λ α → happly (▹-ap (pfix {k = κ} unifyᵏ-body) α) ((app-sngL v (pl ⟶ ql) lc)))
-                   ∙ ap (mapᵏ (⊎.dmap ((v , pl ⟶ ql) ∷_) subs-rec-r) ∘ δᵏ) (happly eq κ)
+                     ap (mapᵏ (⊎.dmap (insS v (pl ⟶ ql)) subs-rec-r) ∘ later)
+                        (▹-ext λ α → happly (▹-ap (pfix {k = κ} unifyᵏ-body) α) (subs1 v (pl ⟶ ql) lc))
+                   ∙ ap (mapᵏ (⊎.dmap (insS v (pl ⟶ ql)) subs-rec-r) ∘ δᵏ) (happly eq κ)
                    ∙ delay-by-mapᵏ res (suc k))
         cnv
 unify⇓-body (ctx , ((pl ⟶ ql) , (pr ⟶ qr)) ∷ lc) ih wcl | no ne =
@@ -203,22 +204,22 @@ unify⇓-body (ctx , ((pl ⟶ ql) , con x)       ∷ lc) ih wcl | no ne =
 unify⇓-body (ctx , (con sl      , (`` v))     ∷ lc) ih wcl | no ne with occurs-dec {v} {t = con sl}
 unify⇓-body (ctx , (con sl      , (`` v))     ∷ lc) ih wcl | no ne | yes oc = absurd oc
 unify⇓-body (ctx , (con sl      , (`` v))     ∷ lc) ih wcl | no ne | no noc =
-  let (res , cnv) = ih (rem v ctx , app-sngL v (con sl) lc)
-                       (rem<C {xs = app-sngL v (con sl) lc} {ys = (con sl , `` v) ∷ lc}
+  let (res , cnv) = ih (rem v ctx , subs1 v (con sl) lc)
+                       (rem<C {xs = subs1 v (con sl) lc} {ys = (con sl , `` v) ∷ lc}
                           (wf-tm-var (all-head wcl .snd)))
                        (subst (wf-constr-list (rem v ctx))
-                              (app-sngL-$↦L ⁻¹) $
+                              (subs1-$↦L ⁻¹) $
                         wf-constr-list-remove (wf-tm-var (all-head wcl .snd))
                                               noc (all-head wcl .fst) (all-tail wcl))
     in
-    ⊎.dmap ((v , con sl) ∷_) subs-rec-r res
+    ⊎.dmap (insS v (con sl)) subs-rec-r res
   , map (λ where
              (k , eq) →
                  suc k
                , fun-ext λ κ →
-                     ap (mapᵏ (⊎.dmap ((v , con sl) ∷_) subs-rec-r) ∘ later)
-                        (▹-ext λ α → happly (▹-ap (pfix {k = κ} unifyᵏ-body) α) ((app-sngL v (con sl) lc)))
-                   ∙ ap (mapᵏ (⊎.dmap ((v , con sl) ∷_) subs-rec-r) ∘ δᵏ) (happly eq κ)
+                     ap (mapᵏ (⊎.dmap (insS v (con sl)) subs-rec-r) ∘ later)
+                        (▹-ext λ α → happly (▹-ap (pfix {k = κ} unifyᵏ-body) α) ((subs1 v (con sl) lc)))
+                   ∙ ap (mapᵏ (⊎.dmap (insS v (con sl)) subs-rec-r) ∘ δᵏ) (happly eq κ)
                    ∙ delay-by-mapᵏ res (suc k))
         cnv
 unify⇓-body (ctx , (con sl      , (pr ⟶ qr)) ∷ lc) ih wcl | no ne =
@@ -237,10 +238,10 @@ unify⇓ {cs} =
 
 -- correctness
 
-SubT-correct : Varctx → List Constr → SubT → 𝒰
+SubT-correct : Varctx → List Constr → SubC Id Term → 𝒰
 SubT-correct ctx cs s = Wf-subst ctx (to-sub s) × Max↦ (unifier cs) (to-sub s)
 
-Unify-correct : Varctx → (cs : List Constr) → SubT ⊎ UnifyFailure cs → 𝒰
+Unify-correct : Varctx → (cs : List Constr) → SubC Id Term ⊎ UnifyFailure cs → 𝒰
 Unify-correct ctx cs = [ SubT-correct ctx cs , (λ _ → ⊤) ]ᵤ
 
 unify-correct-body : ▹ κ (   (cs : List Constr)
@@ -252,7 +253,9 @@ unify-correct-body : ▹ κ (   (cs : List Constr)
                    → wf-constr-list ctx cs
                    → gAllᵖ κ (Unify-correct ctx cs) (unifyᵏ cs)
 unify-correct-body     ih▹ []               ctx w =
-  gAll-now (wf-idsub , ([] , (λ f′ _ → ≤↦-id {f = f′})))
+  gAll-now (  subst (Wf-subst ctx) (to-sub-emp ⁻¹) wf-idsub
+            , []
+            , (λ f′ _ → subst (f′ ≤↦_) (to-sub-emp ⁻¹) (≤↦-id {f = f′})))
 unify-correct-body     ih▹ ((tl , tr) ∷ cs) ctx w with tl ≟ tr
 unify-correct-body {κ} ih▹ ((tl , tr) ∷ cs) ctx w | yes e =
   gAll-later λ α →
@@ -267,17 +270,24 @@ unify-correct-body     ih▹ (((`` v)      , tr)         ∷ cs) ctx w | no ne w
 unify-correct-body     ih▹ (((`` v)      , tr)         ∷ cs) ctx w | no ne | yes oc = gAll-now tt
 unify-correct-body {κ} ih▹ (((`` v)      , tr)         ∷ cs) ctx w | no ne | no noc =
   let w′ = subst (wf-constr-list (rem v ctx))
-                 (app-sngL-$↦L ⁻¹)
+                 (subs1-$↦L ⁻¹)
                  (wf-constr-list-remove (wf-tm-var (all-head w .fst))
                                  noc (all-head w .snd) (all-tail w))
     in
   gAll-later λ α →
     all-mapᵏ (λ where
                  {x = inl su} (wsu , mx) →
-                     wf-sub-insert {su = su}
-                                   (occurs-wf-tm (all-head w .snd) noc)
-                                   (wf-tm-var (all-head w .fst)) wsu
-                   , (Max↦≃ (λ f →   ↦𝒫◇-id≃ {p = ↦𝒫× (unifies (`` v) tr) (unifier cs) } f
+                     (subst (Wf-subst ctx) (to-sub-ins ⁻¹) $
+                      wf-sub-◇ {s1 = v ≔ tr}
+                         (wf-sub-≔
+                           (wf-tm-var (all-head w .fst))
+                           (occurs-wf-tm (all-head w .snd) noc))
+                         (subst (λ q → Wf-subst q (to-sub su))
+                                (  ap (rem v) (minus-[]-r ⁻¹)
+                                 ∙ minus-∷-r ⁻¹)
+                                wsu))
+                   , (subst (Max↦ (unifier (((`` v) , tr) ∷ cs))) (to-sub-ins ⁻¹) $
+                      Max↦≃ (λ f →   ↦𝒫◇-id≃ {p = ↦𝒫× (unifies (`` v) tr) (unifier cs) } f
                                     ∙ all-×≃ {P = λ where (x , y) → unifies x y f} ⁻¹)
                              (to-sub su ◇ (v ≔ tr)) $
                              optimist-lemma {p = unifies (`` v) tr} {q = unifier cs} {a = id↦}
@@ -290,28 +300,35 @@ unify-correct-body {κ} ih▹ (((`` v)      , tr)         ∷ cs) ctx w | no ne 
                                        (◇-id-r {s = v ≔ tr} ⁻¹) $
                                  Max↦≃ (λ s → unifier-append≃) (to-sub su) $
                                  subst (λ q → Max↦ (unifier q) (to-sub su))
-                                       app-sngL-$↦L $
+                                       subs1-$↦L $
                                  mx))
                  {x = inr _} _ → tt)
-             (subst (gAllᵖ κ (Unify-correct (rem v ctx) (app-sngL v tr cs)))
-                    (happly (▹-ap (pfix unifyᵏ-body ⁻¹) α) (app-sngL v tr cs))
-                    ((ih▹ ⊛ next (app-sngL v tr cs) ⊛ next (rem v ctx) ⊛ next w′) α))
+             (subst (gAllᵖ κ (Unify-correct (rem v ctx) (subs1 v tr cs)))
+                    (happly (▹-ap (pfix unifyᵏ-body ⁻¹) α) (subs1 v tr cs))
+                    ((ih▹ ⊛ next (subs1 v tr cs) ⊛ next (rem v ctx) ⊛ next w′) α))
 -- ugh
 unify-correct-body     ih▹ (((pl ⟶ ql) , (`` v))     ∷ cs) ctx w | no ne with occurs-dec {v} {t = pl ⟶ ql}
 unify-correct-body     ih▹ (((pl ⟶ ql) , (`` v))     ∷ cs) ctx w | no ne | yes oc = gAll-now tt
 unify-correct-body {κ} ih▹ (((pl ⟶ ql) , (`` v))     ∷ cs) ctx w | no ne | no noc =
   let w′ = subst (wf-constr-list (rem v ctx))
-                 (app-sngL-$↦L ⁻¹)
+                 (subs1-$↦L ⁻¹)
                  (wf-constr-list-remove (wf-tm-var (all-head w .snd))
                                  noc (all-head w .fst) (all-tail w))
     in
   gAll-later λ α →
     all-mapᵏ (λ where
                  {x = inl su} (wsu , mx) →
-                     wf-sub-insert {su = su}
-                                   (occurs-wf-tm (all-head w .fst) noc)
-                                   (wf-tm-var (all-head w .snd)) wsu
-                   , (Max↦≃ (λ f →   ↦𝒫◇-id≃ {p = ↦𝒫× (unifies (pl ⟶ ql) (`` v)) (unifier cs) } f
+                     (subst (Wf-subst ctx) (to-sub-ins ⁻¹) $
+                      wf-sub-◇ {s1 = v ≔ (pl ⟶ ql)}
+                         (wf-sub-≔
+                           (wf-tm-var (all-head w .snd))
+                           (occurs-wf-tm (all-head w .fst) noc))
+                         (subst (λ q → Wf-subst q (to-sub su))
+                                (  ap (rem v) (minus-[]-r ⁻¹)
+                                 ∙ minus-∷-r ⁻¹)
+                                wsu))
+                   , (subst (Max↦ (unifier (((pl ⟶ ql) , (`` v)) ∷ cs))) (to-sub-ins ⁻¹) $
+                      Max↦≃ (λ f →   ↦𝒫◇-id≃ {p = ↦𝒫× (unifies (pl ⟶ ql) (`` v)) (unifier cs) } f
                                     ∙ all-×≃ {P = λ where (x , y) → unifies x y f} ⁻¹)
                              (to-sub su ◇ (v ≔ (pl ⟶ ql))) $
                              optimist-lemma {p = unifies (pl ⟶ ql) (`` v)} {q = unifier cs} {a = id↦}
@@ -326,12 +343,12 @@ unify-correct-body {κ} ih▹ (((pl ⟶ ql) , (`` v))     ∷ cs) ctx w | no ne 
                                         (◇-id-r {s = v ≔ (pl ⟶ ql)} ⁻¹) $
                                   Max↦≃ (λ s → unifier-append≃) (to-sub su) $
                                   subst (λ q → Max↦ (unifier q) (to-sub su))
-                                        app-sngL-$↦L $
+                                        subs1-$↦L $
                                   mx))
                  {x = inr _} _ → tt)
-             (subst (gAllᵖ κ (Unify-correct (rem v ctx) (app-sngL v (pl ⟶ ql) cs)))
-                    (happly (▹-ap (pfix unifyᵏ-body ⁻¹) α) (app-sngL v (pl ⟶ ql) cs))
-                    ((ih▹ ⊛ next (app-sngL v (pl ⟶ ql) cs) ⊛ next (rem v ctx) ⊛ next w′) α))
+             (subst (gAllᵖ κ (Unify-correct (rem v ctx) (subs1 v (pl ⟶ ql) cs)))
+                    (happly (▹-ap (pfix unifyᵏ-body ⁻¹) α) (subs1 v (pl ⟶ ql) cs))
+                    ((ih▹ ⊛ next (subs1 v (pl ⟶ ql) cs) ⊛ next (rem v ctx) ⊛ next w′) α))
 unify-correct-body {κ} ih▹ (((pl ⟶ ql) , (pr ⟶ qr)) ∷ cs) ctx w | no ne =
   let w′ = (  (wf-tm-arr (all-head w .fst) .fst , wf-tm-arr (all-head w .snd) .fst)
             ∷ (wf-tm-arr (all-head w .fst) .snd , wf-tm-arr (all-head w .snd) .snd)
@@ -354,17 +371,24 @@ unify-correct-body     ih▹ ((con sl      , (`` v))     ∷ cs) ctx w | no ne w
 unify-correct-body     ih▹ ((con sl      , (`` v))     ∷ cs) ctx w | no ne | yes oc = absurd oc
 unify-correct-body {κ} ih▹ ((con sl      , (`` v))     ∷ cs) ctx w | no ne | no noc =
   let w′ = subst (wf-constr-list (rem v ctx))
-                 (app-sngL-$↦L ⁻¹)
+                 (subs1-$↦L ⁻¹)
                  (wf-constr-list-remove (wf-tm-var (all-head w .snd))
                                  noc (all-head w .fst) (all-tail w))
     in
   gAll-later λ α →
     all-mapᵏ (λ where
                  {x = inl su} (wsu , mx) →
-                     wf-sub-insert {su = su}
-                                   (occurs-wf-tm (all-head w .fst) noc)
-                                   (wf-tm-var (all-head w .snd)) wsu
-                   , (Max↦≃ (λ f →   ↦𝒫◇-id≃ {p = ↦𝒫× (unifies (con sl) (`` v)) (unifier cs) } f
+                     (subst (Wf-subst ctx) (to-sub-ins ⁻¹) $
+                      wf-sub-◇ {s1 = v ≔ con sl}
+                         (wf-sub-≔
+                           (wf-tm-var (all-head w .snd))
+                           (occurs-wf-tm (all-head w .fst) noc))
+                         (subst (λ q → Wf-subst q (to-sub su))
+                                (  ap (rem v) (minus-[]-r ⁻¹)
+                                 ∙ minus-∷-r ⁻¹)
+                                wsu))
+                   , (subst (Max↦ (unifier ((con sl , (`` v)) ∷ cs))) (to-sub-ins ⁻¹) $
+                      Max↦≃ (λ f →   ↦𝒫◇-id≃ {p = ↦𝒫× (unifies (con sl) (`` v)) (unifier cs) } f
                                     ∙ all-×≃ {P = λ where (x , y) → unifies x y f} ⁻¹)
                              (to-sub su ◇ (v ≔ (con sl))) $
                              optimist-lemma {p = unifies (con sl) (`` v)} {q = unifier cs} {a = id↦}
@@ -379,12 +403,12 @@ unify-correct-body {κ} ih▹ ((con sl      , (`` v))     ∷ cs) ctx w | no ne 
                                         (◇-id-r {s = v ≔ (con sl)} ⁻¹) $
                                   Max↦≃ (λ s → unifier-append≃) (to-sub su) $
                                   subst (λ q → Max↦ (unifier q) (to-sub su))
-                                        app-sngL-$↦L $
+                                        subs1-$↦L $
                                   mx))
                  {x = inr _} _ → tt)
-             (subst (gAllᵖ κ (Unify-correct (rem v ctx) (app-sngL v (con sl) cs)))
-                    (happly (▹-ap (pfix unifyᵏ-body ⁻¹) α) (app-sngL v (con sl) cs))
-                    ((ih▹ ⊛ next (app-sngL v (con sl) cs) ⊛ next (rem v ctx) ⊛ next w′) α))
+             (subst (gAllᵖ κ (Unify-correct (rem v ctx) (subs1 v (con sl) cs)))
+                    (happly (▹-ap (pfix unifyᵏ-body ⁻¹) α) (subs1 v (con sl) cs))
+                    ((ih▹ ⊛ next (subs1 v (con sl) cs) ⊛ next (rem v ctx) ⊛ next w′) α))
 unify-correct-body     ih▹ ((con sl      , (pr ⟶ qr)) ∷ cs) ctx w | no ne = gAll-now tt
 unify-correct-body     ih▹ ((con sl      , con sr)     ∷ cs) ctx w | no ne = gAll-now tt
 

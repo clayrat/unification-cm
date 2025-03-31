@@ -10,6 +10,7 @@ open import Data.Reflects as Reflects
 open import Data.Bool as Bool hiding (elim ; rec)
 open import Data.Sum hiding (elim)
 open import Data.Nat hiding (elim ; rec)
+open import Data.Nat.Order.Base
 open import Data.Nat.Two
 open import Data.List as List hiding (elim ; rec ; empty? ; drop)
 open import Data.Maybe as Maybe hiding (elim ; rec)
@@ -162,15 +163,28 @@ elim-prop2 {A} {B} {P} e xs ys = elim {P = λ xs → ∀ ys → P xs ys} e′ xs
 
 -- empty?
 
-empty? : LFSet A → Bool
-empty? = rec go
-  where
-  go : Rec A Bool
-  go .[]ʳ = true
-  go .∷ʳ _ _ _ = false
-  go .dropʳ x y p = refl
-  go .swapʳ x y z p = refl
-  go .truncʳ = hlevel!
+opaque
+  empty? : LFSet A → Bool
+  empty? = rec go
+    where
+    go : Rec A Bool
+    go .[]ʳ = true
+    go .∷ʳ _ _ _ = false
+    go .dropʳ x y p = refl
+    go .swapʳ x y z p = refl
+    go .truncʳ = hlevel!
+
+  ∷≠[] : {x : A} {xs : LFSet A}
+       → x ∷ xs ≠ []
+  ∷≠[] = false! ∘ ap empty?
+
+  Reflects-empty? : {s : LFSet A} → Reflects (s ＝ []) (empty? s)
+  Reflects-empty? {A} {s} = elim-prop go s
+    where
+    go : Elim-prop {A = A} λ q → Reflects (q ＝ []) (empty? q)
+    go .[]ʳ = ofʸ refl
+    go .∷ʳ _ _ = ofⁿ ∷≠[]
+    go .truncʳ xs = hlevel!
 
 -- singleton
 
@@ -224,6 +238,8 @@ trunc xs zs e₁ e₂ i j ∪∷ ys =
   go .[]ʳ = ∪∷-id-r y ⁻¹
   go .∷ʳ x {xs} ih = ap (x ∷_) ih ∙ ∪∷-swap {s = y} {r = xs}
   go .truncʳ = hlevel!
+
+-- TODO ∪∷-assoc-comm + ∪∷-comm-assoc
 
 ∪∷-idem : {x : LFSet A} → x ∪∷ x ＝ x
 ∪∷-idem {x} = elim-prop go x
@@ -376,6 +392,10 @@ opaque
          → mapₛ f (x ∷ xs) ＝ f x ∷ mapₛ f xs
   mapₛ-∷ = refl
 
+  mapₛ-sng : {f : A → LFSet B} {x : A}
+           → mapₛ f (sng x) ＝ sng (f x)
+  mapₛ-sng = refl
+
   mapₛ-∪∷ : {f : A → B} {xs ys : LFSet A}
           → mapₛ f (xs ∪∷ ys) ＝ mapₛ f xs ∪∷ mapₛ f ys
   mapₛ-∪∷ {f} {xs} {ys} = elim-prop go xs
@@ -384,6 +404,23 @@ opaque
        go .[]ʳ = refl
        go .∷ʳ x {xs} ih = ap (f x ∷_) ih
        go .truncʳ = hlevel!
+
+opaque
+  apₛ : LFSet (A → B) → LFSet A → LFSet B
+  apₛ {A} {B} = rec go
+    where
+      go : Rec (A → B) (LFSet A → LFSet B)
+      go .[]ʳ _ = []
+      go .∷ʳ f fs r as = mapₛ f as ∪∷ r as
+      go .dropʳ f fs r = fun-ext λ as → ∪∷-assoc {y = mapₛ f as} (mapₛ f as) ∙ ap (_∪∷ r as) (∪∷-idem {x = mapₛ f as})
+      go .swapʳ f g fs r = fun-ext λ as → ∪∷-assoc {y = mapₛ g as} (mapₛ f as) ∙ ap (_∪∷ r as) (∪∷-comm {x = mapₛ f as}) ∙ ∪∷-assoc {y = mapₛ f as} (mapₛ g as) ⁻¹
+      go .truncʳ = hlevel!
+
+  apₛ-[]-l : {s : LFSet A} → apₛ {B = B} [] s ＝ []
+  apₛ-[]-l = refl
+
+-- TODO
+-- apₛ-[]-r : {f : LFSet (A → B)} → apₛ f [] ＝ []
 
 opaque
   bindₛ : (A → LFSet B) → LFSet A → LFSet B
@@ -402,6 +439,10 @@ opaque
   bindₛ-∷ : {f : A → LFSet B} {x : A} {xs : LFSet A}
          → bindₛ f (x ∷ xs) ＝ f x ∪∷ bindₛ f xs
   bindₛ-∷ = refl
+
+  bindₛ-sng : {f : A → LFSet B} {x : A}
+           → bindₛ f (sng x) ＝ f x
+  bindₛ-sng {f} {x} = ∪∷-id-r (f x)
 
   bindₛ-∪∷ : {f : A → LFSet B} {xs ys : LFSet A}
           → bindₛ f (xs ∪∷ ys) ＝ bindₛ f xs ∪∷ bindₛ f ys
@@ -484,6 +525,18 @@ opaque
       go .∷ʳ x {xs} ih = ap (x ∩_) ih ∙ ∩-assoc
       go .truncʳ = hlevel!
 
+-- list interaction
 
 from-list : List A → LFSet A
 from-list = List.rec [] _∷_
+
+∷-from-replicate : ∀ {n} {x : A}
+                 → x ∷ from-list (replicate n x) ＝ sng x
+∷-from-replicate {n = zero}  = refl
+∷-from-replicate {n = suc n} = drop ∙ ∷-from-replicate {n = n}
+
+from-replicate-0< : ∀ {n} {x : A}
+                  → 0 < n
+                  → from-list (replicate n x) ＝ sng x
+from-replicate-0< {n = zero}  zl = false! zl
+from-replicate-0< {n = suc n} _  = ∷-from-replicate {n = n}

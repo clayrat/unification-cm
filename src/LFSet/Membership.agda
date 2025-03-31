@@ -247,8 +247,14 @@ set-extᴱ {xs} {ys} e =
 ∈-list {xs = x ∷ xs} (here px)  = hereₛ px
 ∈-list {xs = x ∷ xs} (there xi) = thereₛ (∈-list xi)
 
--- TODO
--- list-∈ᴱ : {x : A} {xs : List A} → x ∈ₛ from-list xs → Erased ∥ x ∈ xs ∥₁
+list-∈ᴱ : {x : A} {xs : List A} → x ∈ₛ from-list xs → Erased ∥ x ∈ xs ∥₁
+list-∈ᴱ {xs = x ∷ xs} x∈ =
+  erase $
+  rec!
+    [ (λ e → ∣ here e ∣₁)
+    , (λ z∈ → map there (list-∈ᴱ {xs = xs} z∈ .erased))
+    ]ᵤ
+    (∈ₛ-∷→ᴱ x∈ .erased)
 
 ∉-list : {x : A} {xs : List A} → x ∉ xs → x ∉ from-list xs
 ∉-list {xs = List.[]} x∉ = ∉ₛ[]
@@ -333,6 +339,24 @@ opaque
       subst (λ q → (if q then x ∷ filterₛ p xs else filterₛ p xs) ＝ [])
             ((¬so≃is-false $ so-not (a (hereₛ refl))) ⁻¹)
             (ih (a ∘ thereₛ))
+    go .truncʳ _ = hlevel!
+
+  none-filter : {p : A → Bool} {s : LFSet A}
+             → filterₛ p s ＝ []
+             → ∀ {z} → z ∈ s → ⌞ not (p z) ⌟
+  none-filter {p} {s} = elim-prop go s
+    where
+    go : Elim-prop λ q → filterₛ p q ＝ [] → ∀ {z} → z ∈ q → ⌞ not (p z) ⌟
+    go .[]ʳ _ = false!
+    go .∷ʳ x {xs} ih e z∈ with p x | recall p x
+    ... | true  | _      = ⊥.absurd (∷≠[] e)
+    ... | false | ⟪ eq ⟫ =
+      Recomputable-Dec .recompute $ erase $
+      rec!
+        [ (λ z=x → not-so (¬so≃is-false ⁻¹ $ ap p z=x ∙ eq))
+        , (ih e)
+        ]ᵤ
+        (∈ₛ-∷→ᴱ z∈ .erased)
     go .truncʳ _ = hlevel!
 
   filter-⊆ : {p : A → Bool} {s : LFSet A}

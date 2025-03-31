@@ -270,6 +270,11 @@ wf-constr-list-remove {t} vi noc w =
                   (sub-rem wl vi t wrem)
                 , (sub-rem wr vi t wrem)
 
+-- term properties
+
+𝓉𝒫 : 𝒰₁
+𝓉𝒫 = Term → 𝒰
+
 -- substitution properties
 
 ↦𝒫 : 𝒰₁
@@ -377,21 +382,23 @@ wf-sub-idem {s} w =
 -- "order" on terms
 -- TODO should be flipped?
 
-_≤t_ : Term → Term → 𝒰
-t ≤t s =
+_≤𝓉_ : Term → Term → 𝒰
+t ≤𝓉 s =
    Σ[ f ꞉ Sub ] (f $↦ s ＝ t)
 
-≤t-refl : ∀ {t} → t ≤t t
+≤t-refl : ∀ {t} → t ≤𝓉 t
 ≤t-refl = id↦ , sub-id
 
 ≤t-trans : ∀ {t s q}
-          → t ≤t s → s ≤t q → t ≤t q
+          → t ≤𝓉 s → s ≤𝓉 q → t ≤𝓉 q
 ≤t-trans {q} (f , fe) (g , ge) =
     (f ◇ g)
   , sub-◇ {t = q} ∙ ap (f $↦_) ge ∙ fe
 
 -- thinned "order" on substitutions
+
 -- TODO should be flipped?
+
 -- TODO these are actually categories, not orders
 -- to get propositionality one should truncate
 
@@ -430,6 +437,10 @@ f ≤↦ g =
      ∙ ap (_◇ h) efg
      ∙ thin-◇-l {xs = wfg} {f = f} {g = h})
   )
+
+-- minimal term satisfying a property
+Min𝓉 : 𝓉𝒫 → 𝓉𝒫
+Min𝓉 p t = p t × (∀ t′ → p t′ → t ≤𝓉 t′)
 
 -- maximal substitution satisfying a property
 Max↦ : ↦𝒫 → ↦𝒫
@@ -600,7 +611,7 @@ eqv-qren {s = con s₁}    {t = con s₂}       ef eg =
   , λ z  → false! ⦃ Refl-x∉ₛ[] ⦄
 
 ≤t-anti-α : ∀ {t s}
-          → t ≤t s → s ≤t t → t ~α s
+          → t ≤𝓉 s → s ≤𝓉 t → t ~α s
 ≤t-anti-α {t} {s} (f , fs) (g , gt) =
   let (qr , vs , vt , es , et) = eqv-qren fs gt in
   (flp (complete qr)) ,

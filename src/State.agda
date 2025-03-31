@@ -153,7 +153,6 @@ instance
 
   Lawful-Idiom-State : Lawful-Idiom (eff (State S))
   Lawful-Idiom-State .has-lawful-map = Lawful-Map-State
---  Lawful-Idiom-State .pure-id = st-pure-id
   Lawful-Idiom-State .pure-pres-app = st-pure-pres-ap
   Lawful-Idiom-State .pure-interchange = st-pure-interchange
   Lawful-Idiom-State .pure-comp = st-pure-comp

@@ -32,7 +32,7 @@ open import SubC
 
 open import Id
 open import NominalN.Term
-open import NominalN.Cofinite.Base
+open import NominalN.Cofinite.BaseA
 open import NominalN.Cofinite.Sub
 open import NominalN.Cofinite.ISub
 open import NominalN.Cofinite.AU
@@ -105,10 +105,13 @@ au-θᵏ-body a▹ t ts =
                    later (map²ᵏ au-⟶
                           ⍉ (a▹ ⊛ next p ⊛ next ps)
                           ⊛ (a▹ ⊛ next q ⊛ next qs)))
-        (uncouple t ts)
+        (uncouple1 t ts)
+
+au-θᵏ : Term → List Term → gPart κ AUTy
+au-θᵏ = fix au-θᵏ-body
 
 au-θ : Term → List Term → Part AUTy
-au-θ t ts κ = fix {k = κ} au-θᵏ-body t ts
+au-θ t ts κ = au-θᵏ t ts
 
 au : List Term → Maybe (Part Term)
 au []       = nothing
@@ -132,9 +135,9 @@ au-θ⇓-body : ∀ t ts
            → au-θ t ts ⇓
 au-θ⇓-body t ts ih with all (_=? t) ts | recall (all (_=? t)) ts
 au-θ⇓-body t ts ih | true  | _       = pure t , ∣ 0 , refl ∣₁
-au-θ⇓-body t ts ih | false | ⟪ eqa ⟫ with uncouple t ts | recall (uncouple t) ts
+au-θ⇓-body t ts ih | false | ⟪ eqa ⟫ with uncouple1 t ts | recall (uncouple1 t) ts
 au-θ⇓-body t ts ih | false | ⟪ eqa ⟫ | just ((p , ps) , (q , qs)) | ⟪ equ ⟫ =
-  let (l< , r<) = uncouple-sizes {t = t} {ts = ts} equ
+  let (l< , r<) = uncouple1-sizes {t = t} {ts = ts} equ
       (resp , cnvp) = ih p ps l<
       (resq , cnvq) = ih q qs r<
     in
@@ -171,3 +174,5 @@ au⇓ {ts = t ∷ ts} =
      in
      post-process (evalState r (new unfin-ℕ vs , empS)) is
    , map⇓ (λ st → post-process (evalState st (new unfin-ℕ vs , empS)) is) r⇓
+
+-- correctness

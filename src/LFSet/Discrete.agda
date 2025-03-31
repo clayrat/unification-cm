@@ -231,6 +231,17 @@ opaque
         (x ≟ z)
     go .truncʳ _ = hlevel!
 
+  filter-sng : ⦃ d : is-discrete A ⦄ → {p : A → Bool} {z : A} {s : LFSet A}
+             → ⌞ p z ⌟ → z ∈ s
+             → (∀ {x} → x ∈ s → ⌞ p x ⌟ → x ＝ z)
+             → filterₛ p s ＝ sng z
+  filter-sng {p} {z} {s} pz z∈ x=z =
+    set-ext λ x → prop-extₑ!
+      (λ x∈f → let (px , x∈s) = filter-∈ₛ x∈f in
+                hereₛ (x=z x∈s px))
+      (λ x∈s → subst (_∈ₛ filterₛ p s) (∈ₛ∷-∉ x∈s ∉ₛ[] ⁻¹) $
+                ∈-filterₛ pz z∈)
+
 opaque
   unfolding filterₛ
   rem : ⦃ is-discrete A ⦄ → A → LFSet A → LFSet A
@@ -270,6 +281,12 @@ opaque
           ∙ filter-=? {z = x} {s = s} ⁻¹
           ∙ ap (λ q → filterₛ q s) (fun-ext (λ q → =?-sym {x = q})))
     ∙ filter-compl {p = x =?_}
+
+  ∷-rem : ⦃ d : is-discrete A ⦄ {x : A} {s : LFSet A}
+         → x ∷ s ＝ x ∷ rem x s
+  ∷-rem {x} {s} with x ∈? s
+  ... | yes x∈ = ∈ₛ-∷= x∈ ∙ rem-∈-eq x∈ ⁻¹
+  ... | no x∉ = ap (x ∷_) (rem-∉-eq x∉ ⁻¹)
 
   ∉-rem : ⦃ d : is-discrete A ⦄ {s : LFSet A} {x z : A}
          → (z ＝ x) ⊎ (z ∉ s)
@@ -428,6 +445,9 @@ opaque
         (x ≟ y)
     go .truncʳ = hlevel!
 
+  size-[] : ⦃ d : is-discrete A ⦄ → sizeₛ {A = A} [] ＝ 0
+  size-[] = refl
+
   size0 : ⦃ d : is-discrete A ⦄ → {s : LFSet A} → sizeₛ s ＝ 0 → s ＝ []
   size0 {A} {s} = elim-prop go s
     where
@@ -441,13 +461,31 @@ opaque
           (x ∈? xs)
     go .truncʳ = hlevel!
 
+  size-∷ : ⦃ d : is-discrete A ⦄ → {x : A} {s : LFSet A} → sizeₛ (x ∷ s) ＝ suc (sizeₛ (rem x s))
+  size-∷ {x} {s} =
+      ap sizeₛ (∷-rem {x = x} {s = s})
+    ∙ ap (λ q → bit (not q) + sizeₛ (rem x s))
+         (¬so≃is-false $ so-not (false→so! (∉-rem (inl refl))))
+
+  size-sng : ⦃ d : is-discrete A ⦄ → {x : A} → sizeₛ (sng x) ＝ 1
+  size-sng {x} = size-∷ {x = x} {s = []} ∙ ap (suc ∘ sizeₛ) rem-[]
+
   -- TODO can we drop truncation?
-  size>0 : ⦃ d : is-discrete A ⦄ → {s : LFSet A} → 0 < sizeₛ s → ∃[ x ꞉ A ] x ∈ s
-  size>0 {A} {s} = elim-prop go s
+  size>0-∈ : ⦃ d : is-discrete A ⦄ → {s : LFSet A} → 0 < sizeₛ s → ∃[ x ꞉ A ] x ∈ s
+  size>0-∈ {A} {s} = elim-prop go s
     where
     go : Elim-prop λ q → 0 < sizeₛ {A = A} q → ∃[ x ꞉ A ] x ∈ q
     go .[]ʳ = false!
     go .∷ʳ x _ _ = ∣ x , hereₛ refl ∣₁
+    go .truncʳ _ = hlevel!
+
+  size-∈->0 : ⦃ d : is-discrete A ⦄ → {s : LFSet A} {z : A} → z ∈ s → 0 < sizeₛ s
+  size-∈->0 {A} {s} {z} = elim-prop go s
+    where
+    go : Elim-prop λ q → z ∈ q → 0 < sizeₛ {A = A} q
+    go .[]ʳ = false! ⦃ Refl-x∉ₛ[] ⦄
+    go .∷ʳ x {xs} _ _ =
+      subst (0 <_) (size-∷ {x = x} {s = xs} ⁻¹) z<s
     go .truncʳ _ = hlevel!
 
   size-unique : ⦃ d : is-discrete A ⦄ → {s : List A} → Uniq s → sizeₛ (from-list s) ＝ length s
@@ -605,6 +643,7 @@ opaque
       go .truncʳ = hlevel!
 
 opaque
+  unfolding empty?
   -- extract the element if the set is a singleton
 
   extract1 : ⦃ d : is-discrete A ⦄ → LFSet A → Maybe A
@@ -635,5 +674,40 @@ opaque
   extract1-[] : ⦃ d : is-discrete A ⦄ → extract1 (the (LFSet A) []) ＝ nothing
   extract1-[] = refl
 
-  extract1-x∷ : ⦃ d : is-discrete A ⦄ → {x : A} → extract1 (x ∷ []) ＝ just x
+  extract1-x∷ : ⦃ d : is-discrete A ⦄ → {x : A} → extract1 (sng x) ＝ just x
   extract1-x∷ {x} = ap (λ q → if empty? q then just x else nothing) rem-[]
+
+  extract1-just : ⦃ d : is-discrete A ⦄
+                → {s : LFSet A} {x : A}
+                → extract1 s ＝ just x
+                → s ＝ sng x
+  extract1-just {A} {s} {x} = elim-prop go s
+    where
+      go : Elim-prop λ q → extract1 q ＝ just x → q ＝ sng x
+      go .[]ʳ = false!
+      go .∷ʳ x {xs} ih with empty? (rem x xs) | recall empty? (rem x xs)
+      ... | true  | ⟪ eq ⟫ =
+        λ e →   ∷-rem
+              ∙ ap² {C = λ _ _ → LFSet A} _∷_
+                    (just-inj e)
+                    (so→true! ⦃ Reflects-empty? {A = A} {s = rem x xs} ⦄ (so≃is-true ⁻¹ $ eq))
+      ... | false | _ = false!
+      go .truncʳ _ = hlevel!
+
+  extract1-nothing : ⦃ d : is-discrete A ⦄
+                   → {s : LFSet A}
+                   → extract1 s ＝ nothing
+                   → (s ＝ []) ⊎₁ (1 < sizeₛ s)
+  extract1-nothing {A} {s} = elim-prop go s
+    where
+      go : Elim-prop λ q → extract1 {A = A} q ＝ nothing → (q ＝ []) ⊎₁ (1 < sizeₛ q)
+      go .[]ʳ _ = ∣ inl refl ∣₁
+      go .∷ʳ x {xs} ih with empty? (rem x xs) | recall empty? (rem x xs)
+      ... | true  | _      = false!
+      ... | false | ⟪ eq ⟫ = λ _ →
+         ∣ inr (subst (1 <_) (size-∷ {x = x} {s = xs} ⁻¹) $
+                s<s $
+                [ id
+                , (λ s=0 → false! (eq ⁻¹ ∙ ap empty? (size0 (s=0 ⁻¹))))
+                ]ᵤ (≤→<⊎= (z≤ {n = sizeₛ (rem x xs)}))) ∣₁
+      go .truncʳ _ = hlevel!

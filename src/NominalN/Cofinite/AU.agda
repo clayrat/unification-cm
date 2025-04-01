@@ -11,10 +11,9 @@ open import Data.Nat
 open import Data.Nat.Order.Base
 open import Data.String
 open import Data.Maybe as Maybe
-open import Data.Maybe.Instances.Map.Properties
-open import Data.Maybe.Instances.Idiom.Properties
-open import Data.List as List
-open import Data.List.Correspondences.Unary.All
+-- open import Data.Maybe.Instances.Map.Properties
+-- open import Data.Maybe.Instances.Idiom.Properties
+open import Data.Vec.Inductive
 
 open import LFSet
 open import Unfinite
@@ -24,9 +23,9 @@ open import SubC
 open import Id
 
 open import NominalN.Term
-open import NominalN.Cofinite.BaseA
-open import NominalN.Cofinite.Sub
-open import NominalN.Cofinite.ISub
+-- open import NominalN.Cofinite.BaseA
+-- open import NominalN.Cofinite.Sub
+-- open import NominalN.Cofinite.ISub
 
 private variable
   ℓᵃ ℓᵇ ℓᶜ : Level
@@ -57,18 +56,15 @@ pre-process-loop (p ⟶ q) =
      pure (p′ ⟶ q′)
 pre-process-loop t@(con _) = pure t
 
-pre-process1 : Term → List Term → State (Sy × SubC Id Sy) (Term × List Term)
-pre-process1 t ts =
-  do t′ ← pre-process-loop t
-     ts′ ← traverse pre-process-loop ts
-     pure (t′ , ts′)
+pre-process1 : ∀ {n} → Vec Term n → State (Sy × SubC Id Sy) (Vec Term n)
+pre-process1 = traverse pre-process-loop
 
-pre-process : Term → List Term → Term × List Term × SubC Id Sy
-pre-process t ts =
-  let sys = bindₛ syms (from-list ts)
-      ((t′ , ts′) , (_ , s)) = runState (pre-process1 t ts) ((unfin-String .new sys) , empS)
-   in
-  t′ , ts′ , s
+pre-process : ∀ {n} → Vec Term n → Vec Term n × SubC Id Sy
+pre-process ts =
+  let sys = bindₛ syms (from-vec ts)
+      (ts′ , (_ , s)) = runState (pre-process1 ts) ((unfin-String .new sys) , empS)
+    in
+  ts′ , s
 
 -- postprocessing
 

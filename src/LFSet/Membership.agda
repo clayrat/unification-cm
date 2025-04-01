@@ -18,6 +18,8 @@ open import Data.List hiding ([] ; rec ; drop)
 open import Data.List.Correspondences.Unary.Any
 open import Data.List.Membership
 
+open import Data.Vec.Inductive hiding ([] ; rec)
+
 open import Order.Base
 open import Order.Semilattice.Join
 open import Order.Semilattice.Meet
@@ -243,7 +245,8 @@ set-extᴱ {xs} {ys} e =
          ∙ ∪∷-comm {x = ys}
          ∙ ⊆-∪=ᴱ {xs = xs} (λ {x} x∈xs → e x $ x∈xs) .erased)
 
-∈-list : {x : A} {xs : List A} → x ∈ xs → x ∈ₛ from-list xs
+∈-list : {x : A} {xs : List A}
+        → x ∈ xs → x ∈ₛ from-list xs
 ∈-list {xs = x ∷ xs} (here px)  = hereₛ px
 ∈-list {xs = x ∷ xs} (there xi) = thereₛ (∈-list xi)
 
@@ -259,6 +262,13 @@ list-∈ᴱ {xs = x ∷ xs} x∈ =
 ∉-list : {x : A} {xs : List A} → x ∉ xs → x ∉ from-list xs
 ∉-list {xs = List.[]} x∉ = ∉ₛ[]
 ∉-list {xs = x ∷ xs}  x∉ = ∉ₛ-∷ (contra here x∉) (∉-list (contra there x∉))
+
+∈-vec : {n : ℕ} {x : A} {xs : Vec A n}
+       → x ∈ xs → x ∈ₛ from-vec xs
+∈-vec {n = suc n} {xs = x ∷ xs} =
+  [ hereₛ
+  , thereₛ ∘ ∈-vec {xs = xs}
+  ]ᵤ ∘ ∈ᵥ-uncons
 
 opaque
   unfolding filterₛ

@@ -112,22 +112,7 @@ instance
   H-Level-Term = hlevel-basic-instance 2 (is-discrete→is-set auto)
   {-# OVERLAPPING H-Level-Term #-}
 
-is-⟶ : Term → Bool
-is-⟶ (p ⟶ q) = true
-is-⟶ _        = false
-
-⟶-split : Term → Maybe (Term × Term)
-⟶-split (p ⟶ q) = just (p , q)
-⟶-split _        = nothing
-
-⟶-split=just : ∀ {t p q}
-               → ⟶-split t ＝ just (p , q)
-               → t ＝ p ⟶ q
-⟶-split=just {t = `` _} e = false! e
-⟶-split=just {t = p′ ⟶ q′} e =
-  let pqeq = ×-path-inv $ just-inj e in
-  ap² _⟶_ (pqeq .fst) (pqeq .snd)
-⟶-split=just {t = con _} e = false! e
+-- size
 
 tm-size : Term → ℕ
 tm-size (p ⟶ q) = suc (tm-size p + tm-size q)

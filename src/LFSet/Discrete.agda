@@ -20,6 +20,8 @@ open import Data.List.Correspondences.Unary.Unique
 open import Data.List.Correspondences.Unary.Any
 open import Data.List.Membership
 
+open import Data.Vec.Inductive hiding (elim ; rec)
+
 open import Order.Base
 open import Order.Semilattice.Join
 open import Order.Semilattice.Meet
@@ -136,11 +138,21 @@ set-ext {xs} {ys} e =
   ∙ ⊆-∪= {xs = xs} (λ {x} x∈xs → e x $ x∈xs)
 
 list-∈ : ⦃ d : is-discrete A ⦄
-        → {z : A} {xs : List A} → z ∈ₛ from-list xs → z ∈ xs
+        → {z : A} {xs : List A}
+        → z ∈ₛ from-list xs → z ∈ xs
 list-∈ {xs = List.[]} x∈ = absurd (∉ₛ[] x∈)
 list-∈ {xs = x ∷ xs}  x∈ =
-  [ (λ e → here e)
-  , (λ z∈ → there (list-∈ z∈))
+  [ here
+  , there ∘ list-∈
+  ]ᵤ (∈ₛ-∷→ x∈)
+
+vec-∈ : ⦃ d : is-discrete A ⦄
+      → {n : ℕ} {z : A} {xs : Vec A n}
+      → z ∈ₛ from-vec xs → z ∈ xs
+vec-∈ {n = 0} {xs = Vec.[]} x∈ = absurd (∉ₛ[] x∈)
+vec-∈ {n = suc n} {xs = x ∷ xs}  x∈ =
+  [ hereᵥ
+  , thereᵥ ∘ vec-∈ {xs = xs}
   ]ᵤ (∈ₛ-∷→ x∈)
 
 -- TODO these should also work for non-discrete A

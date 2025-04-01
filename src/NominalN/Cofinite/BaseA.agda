@@ -15,9 +15,10 @@ open import Data.String
 open import Data.Maybe as Maybe
 open import Data.Maybe.Instances.Map.Properties
 open import Data.Maybe.Instances.Idiom.Properties
-open import Data.List as List
-open import Data.List.Correspondences.Unary.All
-open import Data.List.Operations.Properties
+open import Data.Vec.Inductive as Vec
+open import Data.Vec.Inductive.Correspondences.Unary.All
+open import Data.Vec.Inductive.Operations
+open import Data.Vec.Inductive.Operations.Properties
 
 open import Id
 open import NominalN.Term
@@ -28,33 +29,141 @@ private variable
   B : 𝒰 ℓᵇ
   C : 𝒰 ℓᶜ
 
-couple : List Term → List Term → List Term
+tm-sizes : {@0 n : ℕ} → Vec Term n → ℕ
+tm-sizes = Vec.rec 0 λ t → tm-size t +_
+
+-- unvar
+
+is-var : Term → Bool
+is-var (`` _) = true
+is-var _      = false
+
+unvar : Term → Maybe Id
+unvar (`` x) = just x
+unvar _      = nothing
+
+unvar-just : {t : Term} {x : Id}
+           → unvar t ＝ just x
+           → t ＝ `` x
+unvar-just {t = `` x} e = ap ``_ (just-inj e)
+unvar-just {t = _ ⟶ _} e = false! e
+unvar-just {t = con _} e = false! e
+
+unvar-nothing : {t : Term}
+              → unvar t ＝ nothing
+              → ∀ {x} → t ≠ `` x
+unvar-nothing {t = `` x}    e = false! e
+unvar-nothing {t = _ ⟶ _} _ = false!
+unvar-nothing {t = con _}   _ = false!
+
+Reflects-unvar : {t : Term}
+               → Reflects (Σ[ x ꞉ Id ] (t ＝ `` x)) (is-just? (unvar t))
+Reflects-unvar {t} with unvar t | recall unvar t
+... | just x | ⟪ eq ⟫ = ofʸ (x , unvar-just eq)
+... | nothing | ⟪ eq ⟫ = ofⁿ λ where (x , e) → unvar-nothing eq e
+
+Dec-unvar : {t : Term}
+          → Dec (Σ[ x ꞉ Id ] (t ＝ `` x))
+Dec-unvar {t} .does = is-just? (unvar t)
+Dec-unvar     .proof = Reflects-unvar
+
+-- unreplicate
+
+unreplicate : {@0 n : ℕ} → Vec Term n → Maybe Term
+unreplicate []       = nothing
+unreplicate (t ∷ ts) = if all (_==tm t) ts then just t else nothing
+
+unreplicate-just : {n : ℕ} {z : Term} {ts : Vec Term n}
+                 → unreplicate ts ＝ just z
+                 → ts ＝ replicate n z
+unreplicate-just {n = 0}         {ts = []}     e = false! e
+unreplicate-just {n = suc n} {z} {ts = t ∷ ts} e with all (_==tm t) ts | recall (all (_==tm t)) ts
+... | true | ⟪ eq ⟫ =
+  let t=z = just-inj e in
+  ap² {C = λ _ _ → Vec _ (suc _)} _∷_ t=z $
+  All-replicate ts $
+  all-map (λ x=t → x=t ∙ t=z) $
+  so→true! ⦃ Reflects-all {xs = ts} λ w → tm-eq-reflects {x = w} {y = t} ⦄ $ so≃is-true ⁻¹ $ eq
+... | false | _ = false! e
+
+unreplicate-nothing : {n : ℕ} {ts : Vec Term n}
+                    → 0 < n
+                    → unreplicate ts ＝ nothing
+                    → ∀ {z} → ts ≠ replicate n z
+unreplicate-nothing {n = zero}  {ts = []}     lt e = false! lt
+unreplicate-nothing {n = suc n} {ts = t ∷ ts} lt e {z} with all (_==tm t) ts | recall (all (_==tm t)) ts
+... | true  | eq = false! e
+... | false | ⟪ eq ⟫ with t ≟ z
+...   | yes t=z =
+  contra
+    (λ e →
+        true→so! ⦃ Reflects-all {xs = ts} λ w → tm-eq-reflects {x = w} {y = t} ⦄ $
+        subst (λ xs → All (_＝ t) xs) (∷-tail-inj e ⁻¹) $
+        subst (λ q → All (_＝ t) (replicate n q)) t=z $
+        replicate-all n)
+  (¬so≃is-false ⁻¹ $ eq)
+...   | no  t≠z = contra (∷-head-inj) t≠z
+
+Reflects-unreplicate : {n : ℕ} {ts : Vec Term n}
+                     → 0 < n
+                     → Reflects (Σ[ x ꞉ Term ] (ts ＝ replicate n x)) (is-just? (unreplicate ts))
+Reflects-unreplicate {ts} lt with unreplicate ts | recall unreplicate ts
+... | just x | ⟪ eq ⟫ =
+  ofʸ (x , unreplicate-just eq)
+... | nothing | ⟪ eq ⟫ =
+  ofⁿ λ where (x , e) →
+                unreplicate-nothing lt eq e
+
+Dec-unreplicate : {n : ℕ} {ts : Vec Term n}
+                → 0 < n
+                → Dec (Σ[ x ꞉ Term ] (ts ＝ replicate n x))
+Dec-unreplicate {ts} lt .does = is-just? (unreplicate ts)
+Dec-unreplicate {ts} lt .proof = Reflects-unreplicate lt
+
+-- uncouple
+
+is-⟶ : Term → Bool
+is-⟶ (p ⟶ q) = true
+is-⟶ _        = false
+
+⟶-split : Term → Maybe (Term × Term)
+⟶-split (p ⟶ q) = just (p , q)
+⟶-split _        = nothing
+
+⟶-split=just : ∀ {t p q}
+               → ⟶-split t ＝ just (p , q)
+               → t ＝ p ⟶ q
+⟶-split=just {t = `` _} e = false! e
+⟶-split=just {t = p′ ⟶ q′} e =
+  let pqeq = ×-path-inv $ just-inj e in
+  ap² _⟶_ (pqeq .fst) (pqeq .snd)
+⟶-split=just {t = con _} e = false! e
+
+Reflects-⟶ : ∀ {t}
+             → Reflects (Σ[ (p , q) ꞉ Term × Term ] (t ＝ p ⟶ q)) (is-⟶ t)
+Reflects-⟶ {t = `` _} = ofⁿ λ where ((p , q) , e) → false! e
+Reflects-⟶ {t = p ⟶ q} = ofʸ ((p , q) , refl)
+Reflects-⟶ {t = con _} = ofⁿ λ where ((p , q) , e) → false! e
+
+couple : {@0 n : ℕ} → Vec Term n → Vec Term n → Vec Term n
 couple = zip-with _⟶_
 
-uncouple : List Term → Maybe (List Term × List Term)
+uncouple : {@0 n : ℕ} → Vec Term n → Maybe (Vec Term n × Vec Term n)
 uncouple = map unzip ∘ traverse ⟶-split
-
-uncouple1 : Term → List Term → Maybe ((Term × List Term) × (Term × List Term))
-uncouple1 (p ⟶ q) ts =
-  map (λ where (ps , qs) → (p , ps) , (q , qs)) $ uncouple ts
-uncouple1 _         _ = nothing
-
-tm-sizes : List Term → ℕ
-tm-sizes = List.rec 0 λ t → tm-size t +_
 
 uncouple-[] : uncouple [] ＝ just ([] , [])
 uncouple-[] = refl
 
-uncouple-nothing-size : ∀ {ts}
+uncouple-nothing-size : {n : ℕ} {ts : Vec Term n}
                       → uncouple ts ＝ nothing
-                      → 0 < length ts
-uncouple-nothing-size e =
-  ≱→< λ le → false! $ e ⁻¹ ∙ ap uncouple (length=0→nil $ ≤0→=0 le)
+                      → 0 < n
+uncouple-nothing-size {n = zero} {ts = []} e = false! e
+uncouple-nothing-size {n = suc n}          _ = z<s
 
 -- TODO how to make these less adhoc?
 -- extract an induction principle?
-traverse-sizes : ∀ {ts} {pqs : List (Term × Term)}
-               → list-traverse ⟶-split ts ＝ just pqs
+traverse-sizes : {@0 n : ℕ} {ts : Vec Term n} {pqs : Vec (Term × Term) n}
+               → vec-traverse ⟶-split ts ＝ just pqs
                → let (ps , qs) = unzip pqs in
                  (tm-sizes ps ≤ tm-sizes ts)
                × (tm-sizes qs ≤ tm-sizes ts)
@@ -62,9 +171,6 @@ traverse-sizes {ts = []}                           e =
   let e′ = just-inj e in
     subst (λ q → tm-sizes (unzip q .fst) ≤ 0) e′ z≤
   , subst (λ q → tm-sizes (unzip q .snd) ≤ 0) e′ z≤
-traverse-sizes {ts = t ∷ ts} {pqs = []}            e =
-  let ((p′ , q′) , xs , _ , _ , ceq) = map²ₘ=just {f = _∷_} {ma = ⟶-split t} e in
-  false! ceq
 traverse-sizes {ts = t ∷ ts} {pqs = (p , q) ∷ pqs} e =
   let ((p′ , q′) , xs , steq , treq , ceq) = map²ₘ=just {f = _∷_} {ma = ⟶-split t} e
       teq = ⟶-split=just steq
@@ -80,7 +186,7 @@ traverse-sizes {ts = t ∷ ts} {pqs = (p , q) ∷ pqs} e =
                (≤-ascend ∙ s≤s (=→≤ (ap tm-size (pqeq .snd ⁻¹)) ∙ ≤-+-l)))
         qs≤
 
-uncouple-sizes : ∀ {ts ps qs}
+uncouple-sizes : {@0 n : ℕ} {ts ps qs : Vec Term n}
                → uncouple ts ＝ just (ps , qs)
                → (tm-sizes ps ≤ tm-sizes ts)
                × (tm-sizes qs ≤ tm-sizes ts)
@@ -92,186 +198,65 @@ uncouple-sizes {ts} e =
     =→≤ (ap tm-sizes (pseq ⁻¹)) ∙ treq .fst
   , =→≤ (ap tm-sizes (qseq ⁻¹)) ∙ treq .snd
 
-{-
-all→traverse : ∀ {ts}
-             → All (λ t → Σ[ (p , q) ꞉ (Term × Term) ] (t ＝ p ⟶ q)) ts
-             → Σ[ zs ꞉ List (Term × Term) ]   (list-traverse ⟶-split ts ＝ just zs)
-                                            × (unzip zs ＝ (xs , ys))
-all→traverse = ?
--}
-
-traverse-couple : ∀ {xs ys}
-                  → length xs ＝ length ys
-                  → Σ[ zs ꞉ List (Term × Term) ] (list-traverse ⟶-split (couple xs ys) ＝ just zs)
+traverse-couple : {@0 n : ℕ} {xs ys : Vec Term n}
+                  → Σ[ zs ꞉ Vec (Term × Term) n ] (vec-traverse ⟶-split (couple xs ys) ＝ just zs)
                                               × (unzip zs ＝ (xs , ys))
-traverse-couple {xs = []}     {ys = []}     e = [] , refl , refl
-traverse-couple {xs = []}     {ys = y ∷ ys} e = false! e
-traverse-couple {xs = x ∷ xs} {ys = []}     e = false! e
-traverse-couple {xs = x ∷ xs} {ys = y ∷ ys} e =
-  let (zs , ej , eu) = traverse-couple {xs = xs} {ys = ys} (suc-inj e)
+traverse-couple {xs = []}     {ys = []}     = [] , refl , refl
+traverse-couple {xs = x ∷ xs} {ys = y ∷ ys} =
+  let (zs , ej , eu) = traverse-couple {xs = xs} {ys = ys}
       (ex , ey) = ×-path-inv eu
     in
     (x , y) ∷ zs
   , ap (mapₘ ((x , y) ∷_)) ej
   , ×-path (ap (x ∷_) ex) (ap (y ∷_) ey)
 
-couple-traverse : ∀ {ts zs}
-                → list-traverse ⟶-split ts ＝ just zs
+couple-traverse : {@0 n : ℕ} {ts : Vec Term n} {zs : Vec (Term × Term) n}
+                → vec-traverse ⟶-split ts ＝ just zs
                 → let (xs , ys) = unzip zs in
-                  (couple xs ys ＝ ts) × (length xs ＝ length ys)
+                  couple xs ys ＝ ts
 couple-traverse {ts = []} {zs = zs} e =
     let (pe , qe) = ×-path-inv (ap unzip (just-inj e)) in
     ap² couple (pe ⁻¹) (qe ⁻¹)
-  , ap length (pe ⁻¹ ∙ qe)
-couple-traverse {ts = t ∷ ts} {zs = []} e =
-  let ((p′ , q′) , xs , _ , _ , ceq) = map²ₘ=just {f = _∷_} {ma = ⟶-split t} e in
-  false! ceq
 couple-traverse {ts = t ∷ ts} {zs = (x , y) ∷ zs} e =
   let ((p′ , q′) , xs , steq , treq , ceq) = map²ₘ=just {f = _∷_} {ma = ⟶-split t} e
-      teq = ⟶-split=just steq
-      (ihc , ihl) = couple-traverse {ts = ts} {zs = zs} (treq ∙ ap just (∷-tail-inj ceq))
       pqeq = ×-path-inv $ ∷-head-inj ceq
    in
-    ap² {C = λ _ _ → List Term} _∷_ (ap² _⟶_ (pqeq .fst ⁻¹) (pqeq .snd ⁻¹) ∙ teq ⁻¹) ihc
-  , ap suc ihl
+  ap² {C = λ _ _ → Vec _ (suc _)} _∷_
+    (ap² _⟶_ (pqeq .fst ⁻¹) (pqeq .snd ⁻¹) ∙ ⟶-split=just steq ⁻¹)
+    (couple-traverse {ts = ts} {zs = zs} (treq ∙ ap just (∷-tail-inj ceq)))
 
-{-
-traverse-eqlen : ∀ {ts} {pqs : List (Term × Term)}
-               → list-traverse ⟶-split ts ＝ just pqs
-               → let (ps , qs) = unzip pqs in
-                 length ps ＝ length qs
-traverse-eqlen {ts = []} e =
-  let (pe , qe) = ×-path-inv (ap unzip (just-inj e)) in
-  ap length (pe ⁻¹ ∙ qe)
-traverse-eqlen {ts = t ∷ ts} {pqs = []} e =
-  let ((p′ , q′) , xs , _ , _ , ceq) = map²ₘ=just {f = _∷_} {ma = ⟶-split t} e in
-  false! ceq
-traverse-eqlen {ts = t ∷ ts} {pqs = x ∷ pqs} e =
-  let ((p′ , q′) , xs , steq , treq , ceq) = map²ₘ=just {f = _∷_} {ma = ⟶-split t} e
-      teq = ⟶-split=just steq
-      pqeq = ×-path-inv $ ∷-head-inj ceq
-   in
-  ap suc (traverse-eqlen {ts = ts} (treq ∙ ap just (∷-tail-inj ceq)))
-
-couple-traverse : ∀ {ts zs}
-                → list-traverse ⟶-split ts ＝ just zs
-                → let (xs , ys) = unzip zs in
-                couple xs ys ＝ ts
-couple-traverse {ts = []} {zs = zs} e =
-  ap (λ q → couple (unzip q .fst) (unzip q .snd)) (just-inj e ⁻¹)
-couple-traverse {ts = t ∷ ts} {zs = []} e =
-  let ((p′ , q′) , xs , _ , _ , ceq) = map²ₘ=just {f = _∷_} {ma = ⟶-split t} e in
-  false! ceq
-couple-traverse {ts = t ∷ ts} {zs = (x , y) ∷ zs} e =
-  let ((p′ , q′) , xs , steq , treq , ceq) = map²ₘ=just {f = _∷_} {ma = ⟶-split t} e
-      teq = ⟶-split=just steq
-      ih = couple-traverse {ts = ts} {zs = zs} (treq ∙ ap just (∷-tail-inj ceq))
-      pqeq = ×-path-inv $ ∷-head-inj ceq
-   in
-  ap² {C = λ _ _ → List Term} _∷_ (ap² _⟶_ (pqeq .fst ⁻¹) (pqeq .snd ⁻¹) ∙ teq ⁻¹) ih
--}
-
-couple-uncouple : ∀ {ts xs ys}
+couple-uncouple : {@0 n : ℕ} {ts xs ys : Vec Term n}
                 → uncouple ts ＝ just (xs , ys)
-                → (couple xs ys ＝ ts) × (length xs ＝ length ys)
+                → couple xs ys ＝ ts
 couple-uncouple {ts} {xs} {ys}  e =
   let (xys , e′ , ue) = mapₘ=just e
       (xe , ye) = ×-path-inv (ue ⁻¹)
-      (xye , xyl) = couple-traverse {ts = ts} {zs = xys} e′
     in
-    ap² couple xe ye ∙ xye
-  , ap length xe ∙ xyl ∙ ap length ye ⁻¹
+    ap² couple xe ye ∙ couple-traverse {ts = ts} {zs = xys} e′
 
-uncouple-couple : ∀ {xs ys}
-                → length xs ＝ length ys
+uncouple-couple : {@0 n : ℕ} {xs ys : Vec Term n}
                 → uncouple (couple xs ys) ＝ just (xs , ys)
-uncouple-couple e =
-  let (zs , ej , eu) = traverse-couple e in
+uncouple-couple =
+  let (zs , ej , eu) = traverse-couple in
   ap (map unzip) ej ∙ ap just eu
 
-{-
-Reflects-uncouple : ∀ {ts}
-                  → Reflects (Σ[ (xs , ys) ꞉ (List Term × List Term) ] (uncouple ts ＝ just (xs , ys)))
-                             (all is-⟶ ts)
-Reflects-uncouple {ts} =
-  Reflects.dmap
-    ({!!})
-    {!!}
-    (Reflects-all {xs = ts} {p = is-⟶} λ t → Reflects-⟶ {t = t})
--}
+uncouple-∷ : ∀ {@0 n : ℕ} {t p q} {ts ps qs : Vec Term n}
+           → uncouple (t ∷ ts) ＝ just (p ∷ ps , q ∷ qs)
+           → (t ＝ p ⟶ q) × (uncouple ts ＝ just (ps , qs))
+uncouple-∷ {t} {ts} e =
+  let e′ = couple-uncouple {ts = t ∷ ts} e ⁻¹ in
+    (∷-head-inj e′)
+  , ap uncouple (∷-tail-inj e′) ∙ uncouple-couple
 
--- uncouple1
-
-uncouple1-sizes : ∀ {t ts p ps q qs}
-               → uncouple1 t ts ＝ just ((p , ps) , (q , qs))
-               → (tm-sizes (p ∷ ps) < tm-sizes (t ∷ ts))
-               × (tm-sizes (q ∷ qs) < tm-sizes (t ∷ ts))
-uncouple1-sizes {t = `` _}           e = false! e
-uncouple1-sizes {t = p′ ⟶ q′} {ts} {p} {q} e =
-  let (pqs , meq , eq) = mapₘ=just e
-      (ppseq , qqseq) = ×-path-inv eq
-      (peq , pseq) = ×-path-inv ppseq
-      (qeq , qseq) = ×-path-inv qqseq
-      (psz , qsz) = uncouple-sizes {ts = ts} (meq ∙ ap just (×-path pseq qseq))
+uncouple-sizes>0 : {n : ℕ} {ts ps qs : Vec Term n}
+                 → 0 < n
+                 → uncouple ts ＝ just (ps , qs)
+                 → (tm-sizes ps < tm-sizes ts)
+                 × (tm-sizes qs < tm-sizes ts)
+uncouple-sizes>0 {n = zero}                                           lt _ = false! lt
+uncouple-sizes>0 {n = suc n} {ts = t ∷ ts} {ps = p ∷ ps} {qs = q ∷ qs} _ e =
+  let (et , ets) = uncouple-∷ {t = t} {ts = ts} e
+      (psz , qsz) = uncouple-sizes {ts = ts} ets
     in
-    <-≤-+ (<-+-r (subst (λ w → tm-size p < 1 + tm-size w) (peq ⁻¹) <-ascend)) psz
-  , <-≤-+ (≤-<-trans (=→≤ (ap tm-size (qeq ⁻¹))) (<-+-0lr z<s)) qsz
-uncouple1-sizes {t = con _}    e = false! e
-
--- unreplicate
-
-unreplicate : List Term → Maybe Id
-unreplicate [] = nothing
-unreplicate ((`` x) ∷ ts) = if all (_==tm (`` x)) ts then just x else nothing
-unreplicate (_ ∷ ts) = nothing
-
-unreplicate-just : ∀ {x ts}
-                 → unreplicate ts ＝ just x
-                 → ts ＝ replicate (length ts) (`` x)
-unreplicate-just     {ts = []}            e = false! e
-unreplicate-just {x} {ts = (`` y) ∷ ts}   e with all (_==tm (`` y)) ts | recall (all (_==tm (`` y))) ts
-... | true | ⟪ eq ⟫ =
-  let e′ = just-inj e in
-   ap² {C = λ _ _ → List Term} _∷_ (ap ``_ e′) $
-   All-replicate ts $
-   all-map (λ e → e ∙ ap ``_ e′) $
-   so→true! ⦃ Reflects-all {xs = ts} λ t → tm-eq-reflects {x = t} {y = `` y} ⦄ $ so≃is-true ⁻¹ $ eq
-... | false | _ = false! e
-unreplicate-just     {ts = (_ ⟶ _) ∷ ts} e = false! e
-unreplicate-just     {ts = con _ ∷ ts}     e = false! e
-
-unreplicate-nothing : ∀ {ts}
-                    → unreplicate ts ＝ nothing
-                    → 0 < length ts
-                    → ∀ {x} → ts ≠ replicate (length ts) (`` x)
-unreplicate-nothing {ts = []} _ lt = false! lt
-unreplicate-nothing {ts = (`` y) ∷ ts} e _ {x} with all (_==tm (`` y)) ts | recall (all (_==tm (`` y))) ts
-... | true  | eq = false! e
-... | false | ⟪ eq ⟫ with y ≟ x
-...   | yes y=x =
-  contra
-    (λ e →
-        true→so! ⦃ Reflects-all {xs = ts} λ t → tm-eq-reflects {x = t} {y = `` y} ⦄ $
-        subst (λ xs → All (_＝ (`` y)) xs) (∷-tail-inj e ⁻¹) $
-        subst (λ q → All (_＝ (`` y)) (replicate (length ts) (`` q))) y=x $
-        replicate-all (length ts))
-  (¬so≃is-false ⁻¹ $ eq)
-...   | no  y≠x = contra (``-inj ∘ ∷-head-inj) y≠x
-unreplicate-nothing {ts = (_ ⟶ _) ∷ ts} e _ = false! ⦃ Reflects-List-≠-head ⦄
-unreplicate-nothing {ts = con _ ∷ ts} e _ = false! ⦃ Reflects-List-≠-head ⦄
-
-Reflects-unreplicate : ∀ {ts}
-                     → 0 < length ts
-                     → Reflects (Σ[ x ꞉ Id ] (ts ＝ replicate (length ts) (`` x))) (is-just? (unreplicate ts))
-Reflects-unreplicate {ts} lt with unreplicate ts | recall unreplicate ts
-... | just x | ⟪ eq ⟫ =
-  ofʸ (x , unreplicate-just eq)
-... | nothing | ⟪ eq ⟫ =
-  ofⁿ λ where (x , e) →
-                unreplicate-nothing eq lt e
-
-Dec-unreplicate : ∀ {ts}
-                → 0 < length ts
-                → Dec (Σ[ x ꞉ Id ] (ts ＝ replicate (length ts) (`` x)))
-Dec-unreplicate {ts} lt .does = is-just? (unreplicate ts)
-Dec-unreplicate {ts} lt .proof = Reflects-unreplicate lt
+    <-≤-+ (<-≤-trans (<-≤-trans <-ascend ≤-+-r) (=→≤ (ap tm-size (et ⁻¹)))) psz
+  , <-≤-+ (<-≤-trans <-+-lr (=→≤ (ap tm-size (et ⁻¹)))) qsz

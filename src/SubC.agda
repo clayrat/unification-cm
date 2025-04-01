@@ -4,9 +4,13 @@ module SubC where
 open import Prelude
 open import Meta.Effect
 
+open import Data.Empty
 open import Data.Bool
+open import Data.Reflects
+open import Data.Dec
 open import Data.Maybe
 open import Data.List as List
+open import Data.List.Correspondences.Unary.Any
 
 private variable
   ℓᵃ ℓᵇ ℓᶜ : Level
@@ -32,3 +36,16 @@ opaque
 
   invS : SubC A B → SubC B A
   invS = map (λ where (a , b) → (b , a))
+
+  -- properties
+
+  keyS : SubC A B → List A
+  keyS = map fst
+
+  lup∉ : ⦃ d : is-discrete A ⦄
+        → {x : A} {s : SubC A B}
+        → x ∉ keyS s → lupS x s ＝ nothing
+  lup∉          {s = []}          _   = refl
+  lup∉ ⦃ d ⦄ {x} {s = (k , v) ∷ s} x∉ =
+    let (x≠k , x∉′) = ¬any-uncons x∉ in
+    if-false {b = x =? k} (false→so! ⦃ d .proof ⦄ x≠k) ∙ lup∉ x∉′

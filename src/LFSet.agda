@@ -14,6 +14,7 @@ open import Data.Nat.Order.Base
 open import Data.Nat.Two
 open import Data.List as List hiding (elim ; rec ; empty? ; drop)
 open import Data.Maybe as Maybe hiding (elim ; rec)
+open import Data.Vec.Inductive as Vec hiding (elim ; rec) renaming (_∷_ to _∷ᵥ_ ; replicate to replicateᵥ)
 
 open import Order.Base
 open import Order.Diagram.Bottom
@@ -525,18 +526,36 @@ opaque
       go .∷ʳ x {xs} ih = ap (x ∩_) ih ∙ ∩-assoc
       go .truncʳ = hlevel!
 
+-- TODO foldable?
+
 -- list interaction
 
 from-list : List A → LFSet A
 from-list = List.rec [] _∷_
 
-∷-from-replicate : ∀ {n} {x : A}
-                 → x ∷ from-list (replicate n x) ＝ sng x
-∷-from-replicate {n = zero}  = refl
-∷-from-replicate {n = suc n} = drop ∙ ∷-from-replicate {n = n}
+∷-from-list-replicate : ∀ {n} {x : A}
+                      → x ∷ from-list (replicate n x) ＝ sng x
+∷-from-list-replicate {n = zero}  = refl
+∷-from-list-replicate {n = suc n} = drop ∙ ∷-from-list-replicate {n = n}
 
-from-replicate-0< : ∀ {n} {x : A}
+from-list-replicate-0< : ∀ {n} {x : A}
+                       → 0 < n
+                       → from-list (replicate n x) ＝ sng x
+from-list-replicate-0< {n = zero}  zl = false! zl
+from-list-replicate-0< {n = suc n} _  = ∷-from-list-replicate {n = n}
+
+-- vector interaction
+
+from-vec : ∀ {n} → Vec A n → LFSet A
+from-vec = Vec.rec [] _∷_
+
+∷-from-vec-replicate : ∀ {n} {x : A}
+                      → x ∷ from-vec (Vec.replicate n x) ＝ sng x
+∷-from-vec-replicate {n = zero}  = refl
+∷-from-vec-replicate {n = suc n} = drop ∙ ∷-from-vec-replicate {n = n}
+
+from-vec-replicate-0< : ∀ {n} {x : A}
                   → 0 < n
-                  → from-list (replicate n x) ＝ sng x
-from-replicate-0< {n = zero}  zl = false! zl
-from-replicate-0< {n = suc n} _  = ∷-from-replicate {n = n}
+                  → from-vec (Vec.replicate n x) ＝ sng x
+from-vec-replicate-0< {n = zero}  zl = false! zl
+from-vec-replicate-0< {n = suc n} _  = ∷-from-vec-replicate {n = n}

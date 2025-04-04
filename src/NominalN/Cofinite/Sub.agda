@@ -74,7 +74,7 @@ _◇_ : Sub → Sub → Sub
 -- singleton
 _≔_ : Id → Term → Sub
 (v ≔ t) .fun x = if v == x then t else `` x
-(v ≔ t) .dom = v ∷ []
+(v ≔ t) .dom = sng v
 (v ≔ t) .cof {x} x∉ =
   given-no ∉ₛ-uncons x∉ .fst ∘ _⁻¹
     return (λ q → (if ⌊ q ⌋ then t else (`` x)) ＝ (`` x))

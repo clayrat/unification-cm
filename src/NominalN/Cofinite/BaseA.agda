@@ -22,6 +22,10 @@ open import Data.Vec.Inductive.Correspondences.Unary.All
 open import Data.Vec.Inductive.Operations
 open import Data.Vec.Inductive.Operations.Properties
 
+open import LFSet
+open import LFSet.Membership
+open import LFSet.Discrete
+
 open import Id
 open import NominalN.Term
 
@@ -33,6 +37,8 @@ private variable
 
 tm-sizes : {@0 n : ℕ} → Vec Term n → ℕ
 tm-sizes = Vec.rec 0 λ t → tm-size t +_
+
+-- TODO REWRITE WITH FIBERS?
 
 -- unvar
 
@@ -157,6 +163,11 @@ unrepvar-nothing {ts} e with unreplicate ts
 unrepvar-nothing {ts} e | just t = inr (t , refl , e)
 unrepvar-nothing {ts} e | nothing = inl refl
 
+nothing-unrep-unrepvar : ∀ {n} {ts : Vec Term n}
+                       → unreplicate ts ＝ nothing
+                       → unrepvar ts ＝ nothing
+nothing-unrep-unrepvar = ap (_>>= unvar)
+
 {-
 Reflects-unrepvar : {n : ℕ} {ts : Vec Term n}
                   → 0 < n
@@ -218,6 +229,11 @@ unrepvar-couple {n = suc n} {xs} {ys} with unreplicate (couple xs ys) | recall u
    in
   ap unvar e
 ... | nothing | _ = refl
+
+couple-inj : ∀ {n} {as bs xs ys : Vec Term n}
+           → couple as bs ＝ couple xs ys
+           → (as ＝ xs) × (bs ＝ ys)
+couple-inj = zip-with-inj ⟶-inj
 
 -- uncouple
 
@@ -362,6 +378,59 @@ uncouple-sizes>0 {n = suc n} {ts = t ∷ ts} {ps = p ∷ ps} {qs = q ∷ qs} _ e
     in
     <-≤-+ (<-≤-trans (<-≤-trans <-ascend ≤-+-r) (=→≤ (ap tm-size (et ⁻¹)))) psz
   , <-≤-+ (<-≤-trans <-+-lr (=→≤ (ap tm-size (et ⁻¹)))) qsz
+
+-- sequence vars
+
+varsq : ∀ {n} → Vec Term n → LFSet Id
+varsq = bindₛ vars ∘ from-vec
+
+varsq-replicate : ∀ {n} {x}
+                → 0 < n
+                → varsq (replicate n (`` x)) ＝ sng x
+varsq-replicate lt = ap (bindₛ vars) (from-vec-replicate-0< lt) ∙ bindₛ-sng
+
+varsq-couple-l : ∀ {n} {xs ys : Vec Term n}
+               → varsq xs ⊆ varsq (couple xs ys)
+varsq-couple-l {xs} {ys} {x} =
+  rec!
+     (λ y y∈ x∈y →
+        let (z , z∈ , yz∈) = ∈-zip-with-l {f = _⟶_} {as = xs} {bs = ys}
+                                     (vec-∈ {xs = xs} y∈)
+          in
+        ∈-bind (∈-vec {xs = couple xs ys} yz∈) (∈ₛ-∪∷←l x∈y))
+     ∘ bind-∈
+
+varsq-couple-r : ∀ {n} {xs ys : Vec Term n}
+               → varsq ys ⊆ varsq (couple xs ys)
+varsq-couple-r {xs} {ys} {x} =
+  rec!
+     (λ y y∈ x∈y →
+        let (z , z∈ , yz∈) = ∈-zip-with-r {f = _⟶_} {as = xs} {bs = ys}
+                                     (vec-∈ {xs = ys} y∈)
+          in
+        ∈-bind (∈-vec {xs = couple xs ys} yz∈) (∈ₛ-∪∷←r {s₁ = vars z} x∈y))
+     ∘ bind-∈
+
+varsq-couple-∪∷ : ∀ {n} {xs ys : Vec Term n}
+                → varsq (couple xs ys) ⊆ (varsq xs ∪∷ varsq ys)
+varsq-couple-∪∷ {xs} {ys} {x} =
+  rec!
+     (λ y y∈ x∈y →
+        let y∈′ = vec-∈ {xs = couple xs ys} y∈
+            (a , b , a∈ , b∈ , ye) = zip-with-∈ {as = xs} {bs = ys} y∈′
+          in
+        [ (∈ₛ-∪∷←l ∘ ∈-bind (∈-vec {xs = xs} a∈))
+        , (∈ₛ-∪∷←r {s₁ = varsq xs} ∘ ∈-bind (∈-vec {xs = ys} b∈))
+        ]ᵤ (∈ₛ-∪∷→ {xs = vars a} $
+            subst (λ q → x ∈ₛ vars q) ye x∈y))
+     ∘ bind-∈
+
+varsq-couple : ∀ {n} {xs ys : Vec Term n}
+             → varsq (couple xs ys) ＝ varsq xs ∪∷ varsq ys
+varsq-couple {xs} {ys} =
+  set-ext λ z →
+    prop-extₑ! (varsq-couple-∪∷ {xs = xs})
+      ([ varsq-couple-l {xs = xs} , varsq-couple-r {xs = xs} ]ᵤ ∘ ∈ₛ-∪∷→ {xs = varsq xs})
 
 -- induction/recursion over uncoupling of sequences
 

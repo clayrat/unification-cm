@@ -129,11 +129,25 @@ opaque
                 → runState (st-pure x) s ＝ (x , s)
   runState-pure = refl
 
+  runState-map : {S : 𝒰 ℓˢ} {A : 𝒰 ℓᵃ} {B : 𝒰 ℓᵇ} {f : A → B} {x : State S A} {s : S}
+               → runState (st-map f x) s ＝ let (a , s′) = runState x s in
+                                           (f a , s′)
+  runState-map = refl
+
   runState-ap : {S : 𝒰 ℓˢ} {A : 𝒰 ℓᵃ} {B : 𝒰 ℓᵇ} {f : State S (A → B)} {x : State S A} {s : S}
               → runState (st-ap f x) s ＝ let (ab , s′) = runState f s in
                                           let (b , s″)  = runState x s′ in
                                           (ab b) , s″
   runState-ap = refl
+
+  runState-bind : {S : 𝒰 ℓˢ} {A : 𝒰 ℓᵃ} {B : 𝒰 ℓᵇ} {f : A → State S B} {x : State S A} {s : S}
+                → runState (st-bind f x) s ＝ let (a , s′) = runState x s in
+                                              runState (f a) s′
+  runState-bind = refl
+
+  runState-gets : {S : 𝒰 ℓˢ} {A : 𝒰 ℓᵃ} {f : S → A} {s : S}
+                → runState (st-gets f) s ＝ (f s , s)
+  runState-gets = refl
 
   eval-run : {S : 𝒰 ℓˢ} {A : 𝒰 ℓᵃ} {x : State S A} {s : S}
            → evalState x s ＝ (runState x s) .fst

@@ -14,7 +14,8 @@ open import Data.Nat.Order.Base
 open import Data.Nat.Two
 open import Data.List as List hiding (elim ; rec ; empty? ; drop)
 open import Data.Maybe as Maybe hiding (elim ; rec)
-open import Data.Vec.Inductive as Vec hiding (elim ; rec) renaming (_∷_ to _∷ᵥ_ ; replicate to replicateᵥ)
+open import Data.Vec.Inductive as Vec hiding (elim ; rec)
+                                      renaming (_∷_ to _∷ᵥ_ ; replicate to replicateᵥ)
 
 open import Order.Base
 open import Order.Diagram.Bottom
@@ -272,6 +273,10 @@ opaque
   filter-[] : {p : A → Bool} → filterₛ p [] ＝ []
   filter-[] = refl
 
+  filter-∷ : {p : A → Bool} {x : A} {xs : LFSet A}
+           → filterₛ p (x ∷ xs) ＝ (if p x then x ∷ filterₛ p xs else filterₛ p xs)
+  filter-∷ = refl
+
   filter-idem : ∀ {s} {p : A → Bool}
               → filterₛ p (filterₛ p s) ＝ filterₛ p s
   filter-idem {s} {p} = elim-prop go s
@@ -478,6 +483,14 @@ opaque
           → joinₛ {js = js} (x ∷ xs) ＝ x ∪ joinₛ {js = js} xs
   joinₛ-∷ = refl
 
+  joinₛ-sng : {o ℓ : Level} {A : Poset o ℓ} {js : is-join-semilattice A}
+              (open is-join-semilattice js)   -- wut
+              {x : Poset.Ob A}
+            → joinₛ {js = js} (sng x) ＝ x
+  joinₛ-sng {js} = ∪-id-r ⦃ b = has-bottom ⦄
+    where
+      open is-join-semilattice js
+
   joinₛ-∪∷ : {o ℓ : Level} {A : Poset o ℓ} {js : is-join-semilattice A}
              (open is-join-semilattice js)   -- wut
              {xs ys : LFSet (Poset.Ob A)}
@@ -513,6 +526,14 @@ opaque
             {x : Poset.Ob A} {xs : LFSet (Poset.Ob A)}
           → meetₛ {ms = ms} (x ∷ xs) ＝ x ∩ meetₛ {ms = ms} xs
   meetₛ-∷ = refl
+
+  meetₛ-sng : {o ℓ : Level} {A : Poset o ℓ} {ms : is-meet-semilattice A}
+              (open is-meet-semilattice ms)   -- wut
+              {x : Poset.Ob A}
+            → meetₛ {ms = ms} (sng x) ＝ x
+  meetₛ-sng {ms} = ∩-id-r ⦃ t = has-top ⦄
+    where
+      open is-meet-semilattice ms
 
   meetₛ-∪∷ : {o ℓ : Level} {A : Poset o ℓ} {ms : is-meet-semilattice A}
              (open is-meet-semilattice ms)   -- wut

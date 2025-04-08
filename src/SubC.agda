@@ -7,7 +7,7 @@ open import Meta.Effect
 open import Data.Empty
 open import Data.Bool
 open import Data.Reflects
-open import Data.Dec
+open import Data.Dec as Dec
 open import Data.Maybe
 open import Data.List as List
 open import Data.List.Correspondences.Unary.Any
@@ -49,3 +49,14 @@ opaque
   lup∉ ⦃ d ⦄ {x} {s = (k , v) ∷ s} x∉ =
     let (x≠k , x∉′) = ¬any-uncons x∉ in
     if-false {b = x =? k} (false→so! ⦃ d .proof ⦄ x≠k) ∙ lup∉ x∉′
+
+  ∉lup : ⦃ d : is-discrete A ⦄
+       → {x : A} {s : SubC A B}
+       → lupS x s ＝ nothing → x ∉ keyS s
+  ∉lup           {s = []} _ = false!
+  ∉lup ⦃ d ⦄ {x} {s = (k , v) ∷ s} =
+    Dec.elim
+      {C = λ q → (if ⌊ q ⌋ then just v else lupS x s) ＝ nothing →  x ∉ keyS ((k , v) ∷ s)}
+      (λ x=k → false!)
+      (λ x≠k → ¬any-∷ x≠k ∘ ∉lup)
+      (x ≟ k)

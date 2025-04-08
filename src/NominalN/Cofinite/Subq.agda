@@ -94,6 +94,8 @@ s $q↦ t = rec-un ($q↦-rec s) t
 $q↦-[] : {s : Subq 0} → s $q↦ [] ＝ []
 $q↦-[] = subst-refl {A = ℕ} {B = λ n → Vec Term n} {x = 0} []
 
+-- unfolding
+
 $q↦-urj : ∀ {n}
          → {ts : Vec Term n} {x : Id}
          → unrepvar ts ＝ just x
@@ -102,7 +104,7 @@ $q↦-urj {n = zero}  {ts} urvj {s} =
   let (t , e , _) = unrepvar-just {ts = ts} urvj in
   false! $ e ⁻¹ ∙ ap unreplicate (size0-nil {xs = ts})
 $q↦-urj {n = suc n} {ts} urvj {s} =
-  elim-un-step-fj hlevel! (rec→elim→-un ($q↦-rec s)) urvj -- (ap (_>>= unvar) urj ∙ uvj)
+  elim-un-step-fj hlevel! (rec→elim→-un ($q↦-rec s)) urvj
 
 $q↦-ucj : ∀ {n}
             → {ts ps qs : Vec Term n}
@@ -122,6 +124,8 @@ $q↦-un : ∀ {n}
 $q↦-un {n = zero}  {ts = []} urvn un     = false! un
 $q↦-un {n = suc n} {ts}      urvn un {s} =
   elim-un-step-un hlevel! (rec→elim→-un ($q↦-rec s)) urvn un
+
+-- substitution on vars
 
 $q↦-`` : ∀ {n} {s : Subq n} {x}
        → s $q↦ replicate n (`` x) ＝ s # x
@@ -144,6 +148,36 @@ _◇q_ : ∀ {n} → Subq n → Subq n → Subq n
   ap (g $q↦_) (f .cofq x∉f) ∙ $q↦-`` ∙ g .cofq x∉g
 
 -- properties
+
+≔q-inj : ∀ {n} {v} {ts : Vec Term n}
+       → 0 < n
+       → unreplicate ts ＝ nothing
+       → Injective ((v ≔q ts) .funq)
+≔q-inj {n} {v} {ts} lt unr {x} {y} =
+  Dec.elim
+    {C = λ q → (if ⌊ q ⌋ then ts else replicate n (`` x)) ＝ (if v == y then ts else replicate n (`` y)) → x ＝ y}
+    (λ v=x →
+         Dec.elim
+            {C = λ q → ts ＝ (if ⌊ q ⌋ then ts else replicate n (`` y)) → x ＝ y}
+            (λ v=y _ → v=x ⁻¹ ∙ v=y)
+            (λ _   e → absurd (unreplicate-nothing lt unr e))
+            (v ≟ y))
+    (λ v≠x →
+        Dec.elim
+            {C = λ q → replicate n (`` x) ＝ (if ⌊ q ⌋ then ts else replicate n (`` y)) → x ＝ y}
+            (λ _   e → absurd (unreplicate-nothing lt unr (e ⁻¹)))
+            (λ v≠y e → ``-inj (replicate-inj n lt e))
+            (v ≟ y))
+    (v ≟ x)
+
+{-
+◇q-inj : ∀ {n} {s t : Subq n}
+       → Injective (s .funq)
+       → Injective (t .funq)
+       → Injective ((s ◇q t) .funq)
+◇q-inj is it e =
+  {!!}
+-}
 
 subq-idq : ∀ {n} {ts} → id↦q n $q↦ ts ＝ ts
 subq-idq {n} {ts} = elim-un go ts
@@ -274,6 +308,118 @@ thinq-◇-l {xs} {f} {g} =
 thinq-◇-r : ∀ {n} {xs} {f g : Subq n} → f ◇q thinq xs g ＝ thinq xs (f ◇q g)
 thinq-◇-r {xs} = subq-ext refl (∪∷-assoc xs ⁻¹)
 
+$q↦?-replicate-eq : ∀ {n} {p s : Subq n} {x : Id}
+            → p # x ＝ s # x
+            → p $q↦? x ! replicate n (`` x) ＝ s $q↦? x ! replicate n (`` x)
+$q↦?-replicate-eq {n} {p} {s} {x} pse =
+  Dec.elim
+    {C = λ q → (if ⌊ q ⌋ then p # x else replicate n (`` x)) ＝ s $q↦? x ! replicate n (`` x)}
+    (λ _ →
+       Dec.elim
+         {C = λ q → p # x ＝ (if ⌊ q ⌋ then s # x else replicate n (`` x))}
+         (λ _   → pse)
+         (λ x∉s → pse ∙ s .cofq x∉s)
+         (x ∈? s .domq))
+    (λ x∉p →
+      Dec.elim
+         {C = λ q → replicate n (`` x) ＝ (if ⌊ q ⌋ then s # x else replicate n (`` x))}
+         (λ _ → p .cofq x∉p ⁻¹ ∙ pse)
+         (λ _ → refl)
+         (x ∈? s .domq))
+    (x ∈? p .domq)
+
+varsq-eq : ∀ {n} {p s : Subq n} {ts : Vec Term n}
+         → ({x : Id} → x ∈ varsq ts → (p # x) ＝ (s # x))
+         → (p $q↦ ts) ＝ (s $q↦ ts)
+varsq-eq {p} {s} {ts} = elim-un go ts
+  where
+  go : ∀ {n} → {p s : Subq n}
+     → Elim-un Id unrepvar λ q → ({x : Id} → x ∈ varsq q → (p # x) ＝ (s # x))
+                               → (p $q↦ q) ＝ (s $q↦ q)
+  go {n = zero}  {p} {s} .eu[] {ts} _ _ =
+       ap {x = ts} (p $q↦_) size0-nil ∙ $q↦-[] {s = p}
+    ∙ (ap {x = ts} (s $q↦_) size0-nil ∙ $q↦-[] {s = s}) ⁻¹
+  go {n = suc n}         .eu[] e = false! e
+  go             {p} {s} .euf {ts} {a} lt urvj e =
+    let tse = unrepvar-just-eq {ts = ts} {x = a} urvj in
+      $q↦-urj urvj
+    ∙ ap (p $q↦? a !_) tse
+    ∙ $q↦?-replicate-eq {p = p} {s = s} {x = a}
+         (e $ subst (a ∈ₛ_)
+                    (varsq-replicate lt ⁻¹ ∙ ap varsq tse ⁻¹)
+                    (hereₛ refl))
+    ∙ ap (s $q↦? a !_) (tse ⁻¹)
+    ∙ $q↦-urj urvj ⁻¹
+  go .eunj {ps} {qs} {ts} lt urvn uj ihp ihq e =
+    let ec = couple-uncouple {ts = ts} uj in
+      $q↦-ucj urvn uj
+    ∙ ap² couple
+          (ihp λ {x} x∈ → e (subst (λ q → x ∈ₛ varsq q) ec (varsq-couple-l {xs = ps} x∈)))
+          (ihq λ {x} x∈ → e (subst (λ q → x ∈ₛ varsq q) ec (varsq-couple-r {xs = ps} x∈)))
+    ∙ $q↦-ucj urvn uj ⁻¹
+  go .eunn _ urvn un _ =
+      $q↦-un urvn un
+    ∙ $q↦-un urvn un ⁻¹
+
+$q↦?-eq-replicate : ∀ {n} {p s : Subq n} {x : Id}
+                  → p $q↦? x ! replicate n (`` x) ＝ s $q↦? x ! replicate n (`` x)
+                  → p # x ＝ s # x
+$q↦?-eq-replicate {n} {p} {s} {x} =
+  Dec.elim
+    {C = λ q → (if ⌊ q ⌋ then p # x else replicate n (`` x)) ＝ s $q↦? x ! replicate n (`` x) → p # x ＝ s # x}
+    (λ _ →
+       Dec.elim
+         {C = λ q → p # x ＝ (if ⌊ q ⌋ then s # x else replicate n (`` x)) → p # x ＝ s # x}
+         (λ _     → id)
+         (λ x∉s e → e ∙ s .cofq x∉s ⁻¹)
+         (x ∈? s .domq))
+    (λ x∉p →
+      Dec.elim
+         {C = λ q → replicate n (`` x) ＝ (if ⌊ q ⌋ then s # x else replicate n (`` x)) → p # x ＝ s # x}
+         (λ _ e   → p .cofq x∉p ∙ e)
+         (λ x∉s _ → p .cofq x∉p ∙ s .cofq x∉s ⁻¹)
+         (x ∈? s .domq))
+    (x ∈? p .domq)
+
+{-
+eq-varsq : ∀ {n} {p s : Subq n} {ts : Vec Term n}
+         → (p $q↦ ts) ＝ (s $q↦ ts)
+         → ({x : Id} → x ∈ varsq ts → (p # x) ＝ (s # x))
+eq-varsq {p} {s} {ts} = elim-un go ts
+  where
+  go : ∀ {n} → {p s : Subq n}
+     → Elim-un Id unrepvar λ q → (p $q↦ q) ＝ (s $q↦ q)
+                               → ({x : Id} → x ∈ varsq q → (p # x) ＝ (s # x))
+  go {n = zero}  {p} {s} .eu[] {ts} _ _ {x} x∈ =
+    false! ⦃ Refl-x∉ₛ[] ⦄ (subst (x ∈ₛ_) (ap {x = ts} varsq size0-nil ∙ bindₛ-[]) x∈)
+  go {n = suc n}         .eu[] e = false! e
+  go {n}         {p} {s} .euf {ts} {a} lt urvj e {x} x∈ =
+    let tse = unrepvar-just-eq {ts = ts} {x = a} urvj
+        x=a = sng-∈ $ subst (x ∈ₛ_) (varsq-replicate lt) $ subst (λ q → x ∈ₛ varsq q) tse x∈
+      in
+    $q↦?-eq-replicate {p = p} {s = s} $
+       ap (λ q → p $q↦? q ! replicate n (`` q)) x=a
+     ∙ ap (p $q↦? a !_) (tse ⁻¹)
+     ∙ $q↦-urj urvj ⁻¹
+     ∙ e
+     ∙ $q↦-urj urvj
+     ∙ ap (s $q↦? a !_) tse
+     ∙ ap (λ q → s $q↦? q ! replicate n (`` q)) (x=a ⁻¹)
+  go             {p} {s} .eunj {ps} {qs} {ts} _ urvn uj ihp ihq e {x} x∈ =
+    let e′ = $q↦-ucj {ts = ts} urvn uj ⁻¹ ∙ e ∙ $q↦-ucj {ts = ts} urvn uj
+        (eps , eqs) = couple-inj e′
+      in
+    [ ihp eps
+    , ihq eqs
+    ]ᵤ (∈ₛ-∪∷→ {xs = varsq ps} $
+        varsq-couple-∪∷ {xs = ps} $
+        subst (λ q → x ∈ₛ varsq q)
+              (couple-uncouple {ts = ts} uj ⁻¹)
+              x∈)
+  go {p} {s} .eunn {ts} _ urvn un e x∈ =
+    {!!}  -- doesn't hold?
+-}
+
 ∈-graphq : ∀ {n} {x : Id} {ts : Vec Term n} {sq : Subq n}
          → (x , ts) ∈ graphq sq
          → x ∈ sq .domq × (sq # x ＝ ts)
@@ -304,6 +450,16 @@ codom-∈ : ∀ {n} {sq : Subq n} {x : Id} {ts : Vec Term n}
         → x ∈ sq .domq
         → ts ∈ codomq sq
 codom-∈ {sq} e x∈ = subst (_∈ₛ codomq sq) e (∈-mapₛ x∈)
+
+-- substitution properties
+
+↦𝒫q : ℕ → 𝒰₁
+↦𝒫q n = Subq n → 𝒰
+
+-- disjointness of variables
+
+∥``↦q : ∀ {n} → Vec Term n → ↦𝒫q n
+∥``↦q ts s = (x : Id) → x ∈ varsq ts → x ∈ s .domq → ⊥
 
 -- thinned "order" on seq substitutions
 

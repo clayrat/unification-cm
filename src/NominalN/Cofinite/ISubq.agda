@@ -51,12 +51,25 @@ isq-just-∈ {isq} ej =
   dec→essentially-classical Dec-∈ₛ
     λ xs∉ → false! $ ej ⁻¹ ∙ isq .icofq xs∉
 
--- TODO isubq-ext
+isubq-ext : ∀ {n} {s₁ s₂ : ISubq n} → s₁ .ifunq ＝ s₂ .ifunq → s₁ .idomq ＝ s₂ .idomq → s₁ ＝ s₂
+isubq-ext {s₁ = is-isubq f₁ d₁ c₁} {s₂ = is-isubq f₂ d₂ c₂} ef ed =
+  ap² (is-isubq $²_)
+      (×-path ef ed)
+      (to-pathᴾ ((∀-is-of-hlevel 1 λ x → Π-is-of-hlevel 1 λ x∉ → hlevel 1) _ c₂))
 
 empiq : (n : ℕ) → ISubq n
 empiq n .ifunq _ = nothing
 empiq n .idomq = []
 empiq n .icofq _ = refl
+
+insq : ∀ {n} → Vec Term n → Id → ISubq n → ISubq n
+insq ts x s .ifunq xs = if xs =? ts then just x else s .ifunq xs
+insq ts x s .idomq = ts ∷ s .idomq
+insq ts x s .icofq {xs} xs∉ =
+  let (xs≠ts , xs∉′) = ∉ₛ-uncons xs∉ in
+  given-no xs≠ts
+     return (λ q → (if ⌊ q ⌋ then just x else s .ifunq xs) ＝ nothing)
+     then s .icofq xs∉′
 
 -- TODO pull out filter+graph
 filt-graph-∈ : ∀ {n} {sq : Subq n} {ts}
@@ -172,6 +185,58 @@ inv-subq sq .icofq {xs} xs∉ =
                           xs∉))
   ∙ extract1-[]
 
+inv-insq : ∀ {n} {ts : Vec Term n} {z} {θ : Subq n}
+         → unrepvar ts ＝ nothing
+         → uncouple ts ＝ nothing
+         → ts ∉ codomq θ
+         → z ∉ θ .domq
+         → insq ts z (inv-subq θ) ＝ inv-subq (θ ◇q (z ≔q ts))
+inv-insq {ts} {z} {θ} urn ucn ts∉ z∉ =
+  let eq1 = $q↦-un urn ucn ⁻¹ ∙ ap (θ $q↦_) (if-true (true→so! (the (z ＝ z) refl)) ⁻¹)
+      eq2 = eq-∈-mapₛ λ {x} x∈ →
+              $q↦-`` ⁻¹
+            ∙ ap (θ $q↦_)
+                 (if-false $
+                  false→so! (the (z ≠ x) $
+                             contra (λ e → subst (_∈ₛ θ .domq) (e ⁻¹) x∈) z∉)) ⁻¹
+    in
+  isubq-ext
+    (fun-ext λ qs →
+         Dec.elim
+            {C = λ q →
+                 (if ⌊ q ⌋ then just z else inv-fun θ qs)
+               ＝ (mapₘ fst (extract1 (if ⌊ q ⌋
+                                         then (z , ts) ∷ filterₛ (λ q → qs =? q .snd) (graphq θ)
+                                         else filterₛ (λ q → qs =? q .snd) (graphq θ))))}
+            (λ qs=ts → ap (mapₘ fst)
+                          (  extract1-x∷ ⁻¹
+                           ∙ ap (λ q → extract1 ((z , ts) ∷ q))
+                                (filter-none (λ where {x = (a , as)} as∈ →
+                                                         false→so! (the (qs ≠ as)
+                                                                        (contra (λ qs=as →
+                                                                               let (a∈ , ae) = ∈-graphq {sq = θ} as∈ in
+                                                                               codom-∈ {sq = θ} (ae ∙ qs=as ⁻¹ ∙ qs=ts) a∈) ts∉))) ⁻¹)))
+            (λ _ → refl)
+            (qs ≟ ts)
+       ∙ ap² (λ u w → map fst (extract1
+                                (if qs =? u
+                                  then (z , u) ∷ filterₛ (λ q → qs =? q .snd) w
+                                  else filterₛ (λ q → qs =? q .snd) w)))
+            eq1
+            -- TODO duplication
+            (eq-∈-mapₛ λ {x} x∈ →
+                           ×-path refl ($q↦-`` ⁻¹
+                         ∙ ap (θ $q↦_)
+                              (if-false $
+                               false→so! (the (z ≠ x) $
+                                          contra (λ e → subst (_∈ₛ θ .domq) (e ⁻¹) x∈) z∉)) ⁻¹))
+       ∙ ap (λ w → map fst (extract1 w)) (filter-∷ ⁻¹)
+       ∙ ap (λ w → map fst (extract1 (filterₛ (λ q → qs =? q .snd) w))) (mapₛ-∷ ⁻¹))
+    (  ap² {C = λ _ _ → LFSet _} _∷_
+         eq1
+         eq2
+     ∙ mapₛ-∷ ⁻¹)
+
 -- inverse sequence substitution
 
 $q←-rec : ∀ {n} → (s : ISubq n) → Rec-un n Id (s #_) (λ n → Vec Term n)
@@ -217,9 +282,52 @@ $q←-un {n = suc n} {s} {ts}      sn un =
 
 -- properties
 
+{-
+-- TODO can be simplified?
+invq-fun-inj : ∀ {n} {s t : Subq n}
+             → Injective (s .funq)
+--             → Injective (t .funq)
+             → inv-fun s ＝ inv-fun t
+             → s .funq ＝ t .funq
+invq-fun-inj {s} {t} injs {- injt -} e =
+  fun-ext λ x →
+    let es = happly e (s # x)
+        et = happly e (t # x)
+      in
+    Dec.rec
+      (λ x∈s →
+        inv-fun-just {sq = t} {ts = s # x} (es ⁻¹ ∙ just-inv-fun {sq = s} injs x∈s) .snd ⁻¹)
+      (λ x∉s →
+        let qq = s .cofq x∉s
+            zz = nothing-inv-fun {sq = s} {ts = s # x} λ {x} x∈ xe → x∉s (subst (_∈ₛ s .domq) (injs xe) x∈)
+            es′ = the (inv-fun t (s # x) ＝ nothing)
+                      (es ⁻¹ ∙ zz)
+          in
+        Dec.rec
+          (λ x∈t →
+              {!!}
+              --absurd (x∉s (inv-fun-just {sq = s} {ts = t # x} (et ∙ just-inv-fun {sq = t} injt x∈t) .fst))
+              )
+          (λ x∉t → s .cofq x∉s ∙ t .cofq x∉t ⁻¹)
+          (x ∈? t .domq)
+          )
+
+      (x ∈? s .domq)
+-}
+{-
+invq-inj : ∀ {n} {s t : Subq n}
+         → Injective (s .funq)
+         → Injective (t .funq)
+         → inv-subq s ＝ inv-subq t
+         → s ＝ t
+invq-inj {s} {t} injs injt e =
+  let ef = invq-fun-inj {s = s} {t = t} injs injt (ap ifunq e) in
+  subq-ext ef (mapₛ-inj injs (ap idomq e ∙ ap (λ q → mapₛ q (t .domq)) (ef ⁻¹)))
+-}
+
 -- NB: injectivity of s not needed!
 invq-$q←-$q↦ : ∀ {n} {s : Subq n} {ts}
-             → ((x : Id) → x ∈ bindₛ vars (from-vec ts) → x ∈ s .domq → ⊥)
+             → ∥``↦q ts s
              → s $q↦ (inv-subq s $q← ts) ＝ ts
 invq-$q←-$q↦ {s} {ts} vd = elim-un go ts vd
   where
@@ -242,28 +350,12 @@ invq-$q←-$q↦ {s} {ts} vd = elim-un go ts vd
       ap (s $q↦_) ($q←-ucj invn uj)
     ∙ $q↦-ucj (unrepvar-couple {xs = inv-subq s $q← ps}) uncouple-couple
     ∙ ap² couple
-          (ihp λ x x∈p x∈s →
-             rec!
-               (λ y y∈ x∈ →
-                   let (z , z∈ , yz∈) = ∈-zip-with-l {f = _⟶_} {as = ps} {bs = qs}
-                                            (vec-∈ {xs = ps} y∈)
-                     in
-                   vd x (∈-bind {y = y ⟶ z}
-                           (∈-vec {xs = ts} (subst ((y ⟶ z) ∈_) ce yz∈))
-                           (∈ₛ-∪∷←l x∈))
-                      x∈s)
-               (bind-∈ x∈p))
-          (ihq λ x x∈q x∈s →
-             rec!
-               (λ y y∈ x∈ →
-                   let (z , z∈ , yz∈) = ∈-zip-with-r {f = _⟶_} {as = ps} {bs = qs}
-                                            (vec-∈ {xs = qs} y∈)
-                     in
-                   vd x (∈-bind {y = z ⟶ y}
-                           (∈-vec {xs = ts} (subst ((z ⟶ y) ∈_) ce yz∈))
-                           (∈ₛ-∪∷←r {s₁ = vars z} x∈))
-                      x∈s)
-               (bind-∈ x∈q))
+          (ihp λ x x∈p →
+             vd x (subst (λ q → x ∈ₛ bindₛ vars (from-vec q)) ce $
+                   varsq-couple-l {xs = ps} x∈p))
+          (ihq λ x x∈q →
+             vd x (subst (λ q → x ∈ₛ bindₛ vars (from-vec q)) ce $
+                   varsq-couple-r {xs = ps} x∈q))
     ∙ couple-uncouple uj
   go {n}         {s} .eunn {ts} lt invn un     vd              =
     let sz0 = uncouple-nothing-size {ts = ts} un in
@@ -277,11 +369,9 @@ invq-$q←-$q↦ {s} {ts} vd = elim-un go ts vd
            ∙ $q↦-``
            ∙ s .cofq (vd x (subst (λ q → x ∈ₛ bindₛ vars (from-vec q))
                                   (tse ⁻¹) $
-                            subst (λ q → x ∈ₛ bindₛ vars q)
-                                  (from-vec-replicate-0< sz0 ⁻¹) $
                             subst (x ∈ₛ_)
-                                  (bindₛ-sng ⁻¹) $
-                           hereₛ refl))
+                                  (varsq-replicate sz0 ⁻¹)
+                           (hereₛ refl)))
            ∙ tse ⁻¹)
         (unrepvar ts)
         refl

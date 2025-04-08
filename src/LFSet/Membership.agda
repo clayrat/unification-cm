@@ -130,7 +130,7 @@ unconsₛ {z} {x} {xs} {B} bp f g z∈∷ =
   ⇉∈ₛ $ erase
     (rec! [ (λ e → absurd (z≠x e)) , id ]ᵤ ((∈ₛ⇉ z∈∷) .erased))
 
-∈ₛ∷-∉ᴱ : {z x : A} {xs : LFSet A} → z ∈ₛ (x ∷ xs) → z ∉ xs → Erased (∥ z ＝ x ∥₁)
+∈ₛ∷-∉ᴱ : {z x : A} {xs : LFSet A} → z ∈ₛ (x ∷ xs) → z ∉ xs → Erased ∥ z ＝ x ∥₁
 ∈ₛ∷-∉ᴱ z∈∷ z∉ =
   erase (rec! [ ∣_∣₁
               , (λ z∈ → absurd (z∉ (⇉∈ₛ (erase z∈)))) ]ᵤ ((∈ₛ⇉ z∈∷) .erased))
@@ -238,6 +238,9 @@ unconsₛ {z} {x} {xs} {B} bp f g z∈∷ =
     erase (  ∈ₛ-∷=ᴱ (∈ₛ-∪∷←r {s₁ = xs} (su (hereₛ refl))) .erased
            ∙ ih (su ∘ thereₛ) .erased)
   go .truncʳ x = hlevel!
+
+sng-∈ᴱ : {x z : A} {xs : LFSet A} → x ∈ₛ sng z → Erased ∥ x ＝ z ∥₁
+sng-∈ᴱ x∈ = ∈ₛ∷-∉ᴱ x∈ ∉ₛ[]
 
 set-extᴱ : {xs ys : LFSet A} → ((z : A) → z ∈ xs ≃ z ∈ ys) → Erased (xs ＝ ys)
 set-extᴱ {xs} {ys} e =
@@ -420,6 +423,19 @@ opaque
               , thereₛ ∘ ih
               ]ᵤ
            (∈ₛ-∷→ᴱ {x = x} y∈∷ .erased))
+    go .truncʳ x = hlevel!
+
+  eq-∈-mapₛ : {A : 𝒰 ℓ} {B : 𝒰 ℓ′}
+              {f g : A → B} {s : LFSet A}
+            → (∀ {x} → x ∈ s → f x ＝ g x)
+            → mapₛ f s ＝ mapₛ g s
+  eq-∈-mapₛ {f} {g} {s} = elim-prop go s
+    where
+    go : Elim-prop λ q → (∀ {x} → x ∈ q → f x ＝ g x) → mapₛ f q ＝ mapₛ g q
+    go .[]ʳ _ = refl
+    go .∷ʳ x {xs} ih efg =
+      ap² {C = λ _ _ → LFSet _} _∷_
+        (efg (hereₛ refl)) (ih (efg ∘ thereₛ))
     go .truncʳ x = hlevel!
 
 opaque

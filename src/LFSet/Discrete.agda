@@ -87,6 +87,10 @@ instance
   , (λ z∈ → absurd (z∉ z∈)) ]ᵤ
   (∈ₛ-∷→ z∈∷)
 
+sng-∈ : ⦃ di : is-discrete A ⦄
+      → {x z : A} → x ∈ₛ sng z → x ＝ z
+sng-∈ x∈ = ∈ₛ∷-∉ x∈ ∉ₛ[]
+
 ∈ₛ-∪∷→ : ⦃ di : is-discrete A ⦄
         → {z : A} {xs ys : LFSet A}
         → z ∈ₛ (xs ∪∷ ys) → (z ∈ₛ xs) ⊎ (z ∈ₛ ys)
@@ -594,6 +598,27 @@ opaque
                  (ih z∈fxs))
        ]ᵤ (∈ₛ-∷→ x∈∷)
     go .truncʳ x = hlevel!
+
+  -- TODO is there a more general way? seems to require injectivity of ∷
+  mapₛ-inj : {f : A → B}
+           → ⦃ dA : is-discrete A ⦄
+           → ⦃ dB : is-discrete B ⦄
+           → Injective f → Injective (mapₛ f)
+  mapₛ-inj {f} inj {x} {y} e =
+    set-ext λ z →
+      prop-extₑ!
+        (λ z∈x →
+            rec! (λ fz fz∈y fze →
+                     subst (_∈ₛ y) (inj (fze ⁻¹)) fz∈y)
+              (mapₛ-∈ {f = f} {s = y} $
+               subst (f z ∈ₛ_) e $
+               ∈-mapₛ {f = f} z∈x))
+        (λ z∈y →
+            rec! (λ fz fz∈x fze →
+                     subst (_∈ₛ x) (inj (fze ⁻¹)) fz∈x)
+              (mapₛ-∈ {f = f} {s = x} $
+               subst (f z ∈ₛ_) (e ⁻¹) $
+               ∈-mapₛ {f = f} z∈y))
 
 opaque
   unfolding bindₛ

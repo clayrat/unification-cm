@@ -241,7 +241,17 @@ trunc xs zs e₁ e₂ i j ∪∷ ys =
   go .∷ʳ x {xs} ih = ap (x ∷_) ih ∙ ∪∷-swap {s = y} {r = xs}
   go .truncʳ = hlevel!
 
--- TODO ∪∷-assoc-comm + ∪∷-comm-assoc
+∪∷-assoc-comm : ∀ (x : LFSet A) {y z} → (x ∪∷ y) ∪∷ z ＝ (x ∪∷ z) ∪∷ y
+∪∷-assoc-comm x {y} {z} =
+    ∪∷-assoc {y = y} x ⁻¹
+  ∙ ap (x ∪∷_) (∪∷-comm {x = y})
+  ∙ ∪∷-assoc {y = z} x
+
+∪∷-comm-assoc : ∀ (x : LFSet A) {y z} → x ∪∷ y ∪∷ z ＝ y ∪∷ x ∪∷ z
+∪∷-comm-assoc x {y} {z} =
+    ∪∷-assoc {y = y} x
+  ∙ ap (_∪∷ z) (∪∷-comm {x = x})
+  ∙ ∪∷-assoc {y = x} y ⁻¹
 
 ∪∷-idem : {x : LFSet A} → x ∪∷ x ＝ x
 ∪∷-idem {x} = elim-prop go x
@@ -369,6 +379,26 @@ opaque
       go .swapʳ x y xs b = and-assoc (p x) (p y) b ⁻¹ ∙ ap (_and b) (and-comm (p x) (p y)) ∙ and-assoc (p y) (p x) b
       go .truncʳ = hlevel!
 
+  allₛ-[] : {p : A → Bool} → allₛ p [] ＝ true
+  allₛ-[] = refl
+
+  allₛ-∷ : {p : A → Bool} {x : A} {xs : LFSet A}
+         → allₛ p (x ∷ xs) ＝ p x and allₛ p xs
+  allₛ-∷ = refl
+
+  allₛ-sng : {p : A → Bool} {x : A}
+           → allₛ p (sng x) ＝ p x
+  allₛ-sng = and-id-r _
+
+  allₛ-∪∷ : {p : A → Bool} {xs ys : LFSet A}
+          → allₛ p (xs ∪∷ ys) ＝ allₛ p xs and allₛ p ys
+  allₛ-∪∷ {p} {xs} {ys} = elim-prop go xs
+     where
+     go : Elim-prop λ q → allₛ p (q ∪∷ ys) ＝ allₛ p q and allₛ p ys
+     go .[]ʳ = refl
+     go .∷ʳ x {xs} ih = ap (p x and_) ih ∙ and-assoc (p x) _ _ ⁻¹
+     go .truncʳ = hlevel!
+
 opaque
   anyₛ : (A → Bool) → LFSet A → Bool
   anyₛ {A} p = rec go
@@ -379,6 +409,26 @@ opaque
       go .dropʳ x xs b = or-assoc (p x) (p x) b ⁻¹ ∙ ap (_or b) (or-idem (p x))
       go .swapʳ x y xs b = or-assoc (p x) (p y) b ⁻¹ ∙ ap (_or b) (or-comm (p x) (p y)) ∙ or-assoc (p y) (p x) b
       go .truncʳ = hlevel!
+
+  anyₛ-[] : {p : A → Bool} → anyₛ p [] ＝ false
+  anyₛ-[] = refl
+
+  anyₛ-∷ : {p : A → Bool} {x : A} {xs : LFSet A}
+         → anyₛ p (x ∷ xs) ＝ p x or anyₛ p xs
+  anyₛ-∷ = refl
+
+  anyₛ-sng : {p : A → Bool} {x : A}
+           → anyₛ p (sng x) ＝ p x
+  anyₛ-sng = or-id-r _
+
+  anyₛ-∪∷ : {p : A → Bool} {xs ys : LFSet A}
+          → anyₛ p (xs ∪∷ ys) ＝ anyₛ p xs or anyₛ p ys
+  anyₛ-∪∷ {p} {xs} {ys} = elim-prop go xs
+     where
+     go : Elim-prop λ q → anyₛ p (q ∪∷ ys) ＝ anyₛ p q or anyₛ p ys
+     go .[]ʳ = refl
+     go .∷ʳ x {xs} ih = ap (p x or_) ih ∙ or-assoc (p x) _ _ ⁻¹
+     go .truncʳ = hlevel!
 
 opaque
   mapₛ : (A → B) → LFSet A → LFSet B
@@ -398,7 +448,7 @@ opaque
          → mapₛ f (x ∷ xs) ＝ f x ∷ mapₛ f xs
   mapₛ-∷ = refl
 
-  mapₛ-sng : {f : A → LFSet B} {x : A}
+  mapₛ-sng : {f : A → B} {x : A}
            → mapₛ f (sng x) ＝ sng (f x)
   mapₛ-sng = refl
 

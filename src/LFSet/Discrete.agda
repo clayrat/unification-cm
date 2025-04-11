@@ -166,10 +166,10 @@ opaque
   unfolding allₛ
   -- TODO factor out allₛ-×≃ : ((z : A) → z ∈ (x ∷ s) → P z) ≃ P x × ((z : A) → z ∈ s → P z)
   Reflects-allₛ : ⦃ d : is-discrete A ⦄
-               → {s : LFSet A} {P : A → 𝒰 ℓ′} {p : A → Bool}
-               → (∀ x → is-prop (P x))
-               → (∀ x → Reflects (P x) (p x))
-               → Reflects ((x : A) → x ∈ s → P x) (allₛ p s)
+                → {s : LFSet A} {P : A → 𝒰 ℓ′} {p : A → Bool}
+                → (∀ x → is-prop (P x))
+                → (∀ x → Reflects (P x) (p x))
+                → Reflects ((x : A) → x ∈ s → P x) (allₛ p s)
   Reflects-allₛ {A} {s} {P} {p} pp rp = elim-prop go s
     where
     go : Elim-prop λ q → Reflects ((x : A) → x ∈ q → P x) (allₛ p q)
@@ -182,6 +182,11 @@ opaque
         (Reflects-× ⦃ rp = rp x ⦄ ⦃ rq = ih ⦄)
     go .truncʳ q =
       reflects-is-of-hlevel 0 $ Π-is-of-hlevel 1 (fun-is-of-hlevel 1 ∘ pp)
+
+  Reflects-allₛ-bool : {A : 𝒰 ℓ} ⦃ d : is-discrete A ⦄
+                     → {s : LFSet A} {p : A → Bool}
+                     → Reflects ((x : A) → x ∈ s → So (p x)) (allₛ p s)
+  Reflects-allₛ-bool = Reflects-allₛ (λ x → hlevel!) (λ x → Reflects-So)
 
   Dec-allₛ
     : ⦃ d : is-discrete A ⦄
@@ -196,9 +201,9 @@ opaque
   unfolding anyₛ
   -- TODO factor out any-⊎≃
   Reflects-anyₛ : {A : 𝒰 ℓ} ⦃ d : is-discrete A ⦄
-               → {s : LFSet A} {P : A → 𝒰 ℓ′} {p : A → Bool}
-               → (∀ x → Reflects (P x) (p x))
-               → Reflects (∃[ x ꞉ A ] x ∈ s × P x) (anyₛ p s)
+                → {s : LFSet A} {P : A → 𝒰 ℓ′} {p : A → Bool}
+                → (∀ x → Reflects (P x) (p x))
+                → Reflects (∃[ x ꞉ A ] x ∈ s × P x) (anyₛ p s)
   Reflects-anyₛ {A} {s} {P} {p} rp = elim-prop go s
     where
     go : Elim-prop λ q → Reflects (∃[ x ꞉ A ] x ∈ q × P x) (anyₛ p q)
@@ -213,6 +218,11 @@ opaque
         (Reflects-⊎ ⦃ rp = rp x ⦄ ⦃ rq = ih ⦄)
     go .truncʳ q = hlevel!
 
+  Reflects-anyₛ-bool : {A : 𝒰 ℓ} ⦃ d : is-discrete A ⦄
+                     → {s : LFSet A} {p : A → Bool}
+                     → Reflects (∃[ x ꞉ A ] x ∈ s × So (p x)) (anyₛ p s)
+  Reflects-anyₛ-bool = Reflects-anyₛ λ x → Reflects-So
+
   Dec-anyₛ
     : {A : 𝒰 ℓ} ⦃ d : is-discrete A ⦄
     → {P : A → 𝒰 ℓ′} {s : LFSet A}
@@ -220,6 +230,25 @@ opaque
     → Dec (∃[ x ꞉ A ] x ∈ s × P x)
   Dec-anyₛ {s} pd .does  = anyₛ (λ x → pd x .does) s
   Dec-anyₛ     pd .proof = Reflects-anyₛ λ x → pd x .proof
+
+Dec-⊆ₛ : ⦃ d : is-discrete A ⦄ {xs ys : LFSet A}
+        → Dec (xs ⊆ ys)
+Dec-⊆ₛ {xs} {ys} .does  = allₛ (_∈ₛ? ys) xs
+Dec-⊆ₛ {xs} {ys} .proof =
+  Reflects.dmap
+    (λ f {x} → f x) (contra λ f x → f)
+    (Reflects-allₛ hlevel! (λ x → Reflects-∈ₛ? {x = x} {xs = ys}) )
+
+instance
+  LFSet-is-discrete : ⦃ is-discrete A ⦄ → is-discrete (LFSet A)
+  LFSet-is-discrete {x} {y} with Dec-⊆ₛ {xs = x} {ys = y}
+  LFSet-is-discrete {x} {y} | yes x⊆y with Dec-⊆ₛ {xs = y} {ys = x}
+  LFSet-is-discrete {x} {y} | yes x⊆y | yes y⊆x =
+    yes $ set-ext λ z → prop-extₑ! x⊆y y⊆x
+  LFSet-is-discrete {x} {y} | yes x⊆y | no ¬y⊆x =
+    no (contra (λ e {z} → subst (z ∈_) (e ⁻¹)) ¬y⊆x)
+  LFSet-is-discrete {x} {y} | no ¬x⊆y =
+    no $ contra (λ e {z} → subst (z ∈_) e) ¬x⊆y
 
 opaque
   unfolding filterₛ
@@ -317,6 +346,12 @@ opaque
   rem-∈-≠ : ⦃ d : is-discrete A ⦄ {z x : A} {s : LFSet A}
            → z ≠ x → z ∈ₛ s → z ∈ₛ rem x s
   rem-∈-≠ z≠x = ∈-filterₛ (false→so! (z≠x ∘ _⁻¹))
+
+  ⊆-rem : ⦃ d : is-discrete A ⦄ → {z : A} {s : LFSet A}
+        → s ⊆ (the (LFSet A) (z ∷ rem z s))
+  ⊆-rem {z} {x} x∈ with x ≟ z
+  ... | yes x=z = hereₛ x=z
+  ... | no x≠z = thereₛ (rem-∈-≠ x≠z x∈)
 
 -- minus and intersection
 

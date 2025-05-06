@@ -353,7 +353,7 @@ opaque
   ... | yes x=z = hereₛ x=z
   ... | no x≠z = thereₛ (rem-∈-≠ x≠z x∈)
 
--- minus and intersection
+-- difference and intersection
 
 opaque
   unfolding rem
@@ -416,9 +416,9 @@ opaque
     let (x∈?t , x∈s) = filter-∈ₛ x∈∩ in
     x∈s , so→true! x∈?t
 
-  ∈-∩∷ : ⦃ d : is-discrete A ⦄ → {s t : LFSet A} {x : A}
+  ∈-∩∷← : ⦃ d : is-discrete A ⦄ → {s t : LFSet A} {x : A}
         → x ∈ s → x ∈ t → x ∈ (s ∩∷ t)
-  ∈-∩∷ x∈s x∈t = ∈-filterₛ (true→so! x∈t) x∈s
+  ∈-∩∷← x∈s x∈t = ∈-filterₛ (true→so! x∈t) x∈s
 
   ∩∷-zero-l : ⦃ d : is-discrete A ⦄ → {xs : LFSet A} → [] ∩∷ xs ＝ []
   ∩∷-zero-l = refl
@@ -453,6 +453,14 @@ opaque
       ∙ ap (filterₛ (_=? x) ys ∪∷_) (filter-and {s = ys} {p = λ q → not (q =? x)} {q = _∈ₛ? xs} ⁻¹)
       ∙ filter-or {s = ys} {p = _=? x} {q = _∈ₛ? xs} ⁻¹
     go .truncʳ _ = hlevel!
+
+  ∈-∩∷→l : ⦃ d : is-discrete A ⦄ {s t : LFSet A} {x : A}
+         → x ∈ (s ∩∷ t) → x ∈ s
+  ∈-∩∷→l {s} {t} x∈∩ = filter-∈ₛ {p = _∈ₛ? t} {s = s} x∈∩ .snd
+
+  ∈-∩∷→r : ⦃ d : is-discrete A ⦄ {s t : LFSet A} {x : A}
+         → x ∈ (s ∩∷ t) → x ∈ t
+  ∈-∩∷→r {s} {t} {x} x∈∩ = ∈-∩∷→l {t = s} (subst (x ∈ₛ_) (∩∷-comm {xs = s} {ys = t}) x∈∩)
 
 -- size
 
@@ -633,6 +641,14 @@ opaque
                  (ih z∈fxs))
        ]ᵤ (∈ₛ-∷→ x∈∷)
     go .truncʳ x = hlevel!
+
+  mapₛ-⊆ : {A : 𝒰 ℓ} {B : 𝒰 ℓ′} -- why
+         → ⦃ dB : is-discrete B ⦄
+         → {f : A → B} {s1 s2 : LFSet A}
+         → s1 ⊆ s2 → mapₛ f s1 ⊆ mapₛ f s2
+  mapₛ-⊆ {f} {s1} {s2} s12 {x} x∈ =
+    rec! (λ a a∈ xe → subst (_∈ₛ mapₛ f s2) (xe ⁻¹) (∈-mapₛ (s12 a∈)))
+         (mapₛ-∈ {s = s1} x∈)
 
   -- TODO is there a more general way? seems to require injectivity of ∷
   mapₛ-inj : {f : A → B}

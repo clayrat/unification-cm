@@ -220,8 +220,14 @@ au-θ-miss-inv {n} lt ts unr unc θi θ θinj θe θd x xgt =
                ln
           ∙ runState-map
           ∙ ap (λ q → `` q .fst , q .snd)
-               runState-bind
-          ∙ {!!}
+               (  runState-bind
+                ∙ ap (λ q → runState (st-bind (λ _ → st-pure (q .fst .fst)) 
+                                              (st-put ( new1 unfin-ℕ (q .fst .fst)
+                                                      , insS ts (q .fst .fst) (q .fst .snd))))
+                                     (q .snd)) runState-get
+                ∙ runState-bind
+                ∙ runState-pure)
+          ∙ ap (λ q → (`` x) , q .snd) runState-put
         , {!!}
         , {!!}
         , {!!}

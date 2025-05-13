@@ -145,9 +145,17 @@ opaque
                                               runState (f a) s′
   runState-bind = refl
 
+  runState-get : {S : 𝒰 ℓˢ} {s : S}
+               → runState st-get s ＝ (s , s)
+  runState-get = refl
+
   runState-gets : {S : 𝒰 ℓˢ} {A : 𝒰 ℓᵃ} {f : S → A} {s : S}
                 → runState (st-gets f) s ＝ (f s , s)
   runState-gets = refl
+
+  runState-put : {S : 𝒰 ℓˢ} {s : S} {s′ : S}
+               → runState (st-put s′) s ＝ (tt , s′)
+  runState-put = refl               
 
   eval-run : {S : 𝒰 ℓˢ} {A : 𝒰 ℓᵃ} {x : State S A} {s : S}
            → evalState x s ＝ (runState x s) .fst

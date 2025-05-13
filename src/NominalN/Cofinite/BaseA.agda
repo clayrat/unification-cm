@@ -9,6 +9,9 @@ open import Data.Empty hiding (_≠_)
 open import Data.Bool
 open import Data.Reflects as Reflects
 open import Data.Dec as Dec
+open import Data.Reflects.Sigma as ReflectsΣ
+open import Data.Dec.Sigma as DecΣ
+
 open import Data.Acc
 open import Data.Nat
 open import Data.Nat.Order.Base
@@ -50,30 +53,26 @@ unvar : Term → Maybe Id
 unvar (`` x) = just x
 unvar _      = nothing
 
+Reflects-unvar : {t : Term}
+               → ReflectsΣ (λ x → t ＝ `` x) (unvar t)
+Reflects-unvar {t = `` x}    = ofʲ x refl
+Reflects-unvar {t = p ⟶ q} = ofⁿ λ x → false!
+Reflects-unvar {t = con x}   = ofⁿ λ x → false!
+
+Dec-unvar : {t : Term}
+          → DecΣ (λ x → t ＝ `` x)
+Dec-unvar {t} .doesm = unvar t
+Dec-unvar     .proofm = Reflects-unvar
+
 unvar-just : {t : Term} {x : Id}
            → unvar t ＝ just x
            → t ＝ `` x
-unvar-just {t = `` x} e = ap ``_ (just-inj e)
-unvar-just {t = _ ⟶ _} e = false! e
-unvar-just {t = con _} e = false! e
+unvar-just {x} e = def→true (Reflects-unvar) (subst (λ q → Def q x) (e ⁻¹) (its refl))
 
 unvar-nothing : {t : Term}
               → unvar t ＝ nothing
               → ∀ {x} → t ≠ `` x
-unvar-nothing {t = `` x}    e = false! e
-unvar-nothing {t = _ ⟶ _} _ = false!
-unvar-nothing {t = con _}   _ = false!
-
-Reflects-unvar : {t : Term}
-               → Reflects (Σ[ x ꞉ Id ] (t ＝ `` x)) (is-just? (unvar t))
-Reflects-unvar {t} with unvar t | recall unvar t
-... | just x | ⟪ eq ⟫ = ofʸ (x , unvar-just eq)
-... | nothing | ⟪ eq ⟫ = ofⁿ λ where (x , e) → unvar-nothing eq e
-
-Dec-unvar : {t : Term}
-          → Dec (Σ[ x ꞉ Id ] (t ＝ `` x))
-Dec-unvar {t} .does = is-just? (unvar t)
-Dec-unvar     .proof = Reflects-unvar
+unvar-nothing e {x} = undef→false Reflects-unvar (λ z → subst (λ q → ¬ Def q z) (e ⁻¹) (¬-def-nothing z)) x
 
 -- unreplicate
 
@@ -81,61 +80,57 @@ unreplicate : {@0 n : ℕ} → Vec Term n → Maybe Term
 unreplicate []       = nothing
 unreplicate (t ∷ ts) = if all (_==tm t) ts then just t else nothing
 
-unreplicate-just : {n : ℕ} {z : Term} {ts : Vec Term n}
-                 → unreplicate ts ＝ just z
-                 → ts ＝ replicate n z
-unreplicate-just {n = 0}         {ts = []}     e = false! e
-unreplicate-just {n = suc n} {z} {ts = t ∷ ts} e with all (_==tm t) ts | recall (all (_==tm t)) ts
-... | true | ⟪ eq ⟫ =
-  let t=z = just-inj e in
-  ap² {C = λ _ _ → Vec _ (suc _)} _∷_ t=z $
-  All-replicate ts $
-  all-map (λ x=t → x=t ∙ t=z) $
-  so→true! ⦃ Reflects-all {xs = ts} λ w → tm-eq-reflects {x = w} {y = t} ⦄ $ so≃is-true ⁻¹ $ eq
-... | false | _ = false! e
-
 just-unreplicate : {n : ℕ} {z : Term}
                  → 0 < n
                  → unreplicate (replicate n z) ＝ just z
-just-unreplicate {n = zero} lt = false! lt
-just-unreplicate {n = suc n} {z} _ =
+just-unreplicate {n = zero}      lt = false! lt
+just-unreplicate {n = suc n} {z} _  =
   if-true {b = all (_==tm z) (replicate n z)} $
   true→so! ⦃ Reflects-all {xs = replicate n z} λ w → tm-eq-reflects {x = w} ⦄ $
   replicate-all n
+
+Reflects-unreplicate : {n : ℕ} {ts : Vec Term n}
+                     → 0 < n
+                     → ReflectsΣ (λ x → ts ＝ replicate n x) (unreplicate ts)
+Reflects-unreplicate {n = zero}                lt = false! lt
+Reflects-unreplicate {n = suc n} {ts = t ∷ ts} lt with all (_==tm t) ts | recall (all (_==tm t)) ts
+... | true  | ⟪ eq ⟫ =
+  ofʲ t (ap² {C = λ _ _ → Vec _ (suc _)} _∷_ refl $
+         All-replicate ts $
+         so→true! ⦃ Reflects-all {xs = ts} λ w → tm-eq-reflects {x = w} {y = t} ⦄ $
+         so≃is-true ⁻¹ $ eq)
+... | false | ⟪ eq ⟫ =
+  ofⁿ λ z →
+    contra
+      (λ e →
+        true→so! ⦃ Reflects-all {xs = ts} λ w → tm-eq-reflects {x = w} {y = t} ⦄ $
+        subst (λ xs → All (_＝ t) xs) (∷-tail-inj e ⁻¹) $
+        subst (λ q → All (_＝ t) (replicate n q)) (∷-head-inj e) $
+        replicate-all n)
+      (¬so≃is-false ⁻¹ $ eq)
+
+unreplicate-just : {n : ℕ} {z : Term} {ts : Vec Term n}
+                 → unreplicate ts ＝ just z
+                 → ts ＝ replicate n z
+unreplicate-just {n = 0}     {ts = []} e = false! e
+unreplicate-just {n = suc n} {z}       e =
+  def→true (Reflects-unreplicate z<s) (subst (λ q → Def q z) (e ⁻¹) (its refl))
 
 unreplicate-nothing : {n : ℕ} {ts : Vec Term n}
                     → 0 < n
                     → unreplicate ts ＝ nothing
                     → ∀ {z} → ts ≠ replicate n z
-unreplicate-nothing {n = zero}  {ts = []}     lt e = false! lt
-unreplicate-nothing {n = suc n} {ts = t ∷ ts} lt e {z} with all (_==tm t) ts | recall (all (_==tm t)) ts
-... | true  | _ = false! e
-... | false | ⟪ eq ⟫ with t ≟ z
-...   | yes t=z =
-  contra
-    (λ e →
-        true→so! ⦃ Reflects-all {xs = ts} λ w → tm-eq-reflects {x = w} {y = t} ⦄ $
-        subst (λ xs → All (_＝ t) xs) (∷-tail-inj e ⁻¹) $
-        subst (λ q → All (_＝ t) (replicate n q)) t=z $
-        replicate-all n)
-  (¬so≃is-false ⁻¹ $ eq)
-...   | no  t≠z = contra (∷-head-inj) t≠z
-
-Reflects-unreplicate : {n : ℕ} {ts : Vec Term n}
-                     → 0 < n
-                     → Reflects (Σ[ x ꞉ Term ] (ts ＝ replicate n x)) (is-just? (unreplicate ts))
-Reflects-unreplicate {ts} lt with unreplicate ts | recall unreplicate ts
-... | just x | ⟪ eq ⟫ =
-  ofʸ (x , unreplicate-just eq)
-... | nothing | ⟪ eq ⟫ =
-  ofⁿ λ where (x , e) →
-                unreplicate-nothing lt eq e
+unreplicate-nothing lt e {z} =
+  undef→false
+    (Reflects-unreplicate lt)
+    (λ x → subst (λ q → ¬ Def q x) (e ⁻¹) (¬-def-nothing x))
+    z
 
 Dec-unreplicate : {n : ℕ} {ts : Vec Term n}
                 → 0 < n
-                → Dec (Σ[ x ꞉ Term ] (ts ＝ replicate n x))
-Dec-unreplicate {ts} lt .does = is-just? (unreplicate ts)
-Dec-unreplicate {ts} lt .proof = Reflects-unreplicate lt
+                → DecΣ (λ x → ts ＝ replicate n x)
+Dec-unreplicate {ts} lt .doesm = unreplicate ts
+Dec-unreplicate {ts} lt .proofm = Reflects-unreplicate lt
 
 -- unrepvar
 
@@ -167,6 +162,19 @@ nothing-unrep-unrepvar : ∀ {n} {ts : Vec Term n}
                        → unreplicate ts ＝ nothing
                        → unrepvar ts ＝ nothing
 nothing-unrep-unrepvar = ap (_>>= unvar)
+
+
+{-
+Reflects-unrepvar : {n : ℕ} {ts : Vec Term n}
+                  → 0 < n
+                  → ReflectsΣ (λ x → ts ＝ replicate n (`` x)) (unrepvar ts)
+Reflects-unrepvar {ts} lt =
+  reflectsΣ-bind
+    ``_
+    {!!}
+    (Reflects-unreplicate lt)
+    λ t → {!!}
+-}
 
 {-
 Reflects-unrepvar : {n : ℕ} {ts : Vec Term n}
@@ -245,20 +253,16 @@ is-⟶ _        = false
 ⟶-split (p ⟶ q) = just (p , q)
 ⟶-split _        = nothing
 
+Reflects-⟶ : ∀ {t}
+             → ReflectsΣ (λ (p , q) → t ＝ p ⟶ q) (⟶-split t)
+Reflects-⟶ {t = `` x}    = ofⁿ λ pq e → false! e
+Reflects-⟶ {t = p ⟶ q} = ofʲ (p , q) refl
+Reflects-⟶ {t = con x}   = ofⁿ λ pq e → false! e
+
 ⟶-split=just : ∀ {t p q}
                → ⟶-split t ＝ just (p , q)
                → t ＝ p ⟶ q
-⟶-split=just {t = `` _} e = false! e
-⟶-split=just {t = p′ ⟶ q′} e =
-  let pqeq = ×-path-inv $ just-inj e in
-  ap² _⟶_ (pqeq .fst) (pqeq .snd)
-⟶-split=just {t = con _} e = false! e
-
-Reflects-⟶ : ∀ {t}
-             → Reflects (Σ[ (p , q) ꞉ Term × Term ] (t ＝ p ⟶ q)) (is-⟶ t)
-Reflects-⟶ {t = `` _} = ofⁿ λ where ((p , q) , e) → false! e
-Reflects-⟶ {t = p ⟶ q} = ofʸ ((p , q) , refl)
-Reflects-⟶ {t = con _} = ofⁿ λ where ((p , q) , e) → false! e
+⟶-split=just {p} {q} e = def→true Reflects-⟶ (subst (λ w → Def w (p , q)) (e ⁻¹) (its refl))
 
 uncouple : {@0 n : ℕ} → Vec Term n → Maybe (Vec Term n × Vec Term n)
 uncouple = map unzip ∘ traverse ⟶-split
@@ -357,6 +361,14 @@ uncouple-couple : {@0 n : ℕ} {xs ys : Vec Term n}
 uncouple-couple =
   let (zs , ej , eu) = traverse-couple in
   ap (map unzip) ej ∙ ap just eu
+
+{-
+Reflects-uncouple : {@0 n : ℕ} {ts : Vec Term n}
+                  → ReflectsΣ (λ (ps , qs) → ts ＝ couple ps qs) (uncouple ts)
+Reflects-uncouple {ts} with uncouple ts | recall uncouple ts
+... | just (ps , qs) | ⟪ eq ⟫ = ofʲ (ps , qs) (couple-uncouple eq ⁻¹)
+... | nothing        | ⟪ eq ⟫ = ofⁿ λ pqs e → {!!}
+-}
 
 uncouple-∷ : ∀ {@0 n : ℕ} {t p q} {ts ps qs : Vec Term n}
            → uncouple (t ∷ ts) ＝ just (p ∷ ps , q ∷ qs)

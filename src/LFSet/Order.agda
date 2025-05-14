@@ -3,7 +3,11 @@ module LFSet.Order where
 
 open import Cat.Prelude
 open import Meta.Effect
+open import Logic.Decidability
+
 open import Data.Empty
+open import Data.Bool
+open import Data.Dec as Dec
 open import Data.Nat
 open import Data.Nat.Order.Base
 open import Data.Sum
@@ -109,6 +113,14 @@ LFSet<-trans {x} (sxy , nxy) (syz , nyz) =
   , map²
       (λ where _ (b , b∉y , b∈z) → b , contra sxy b∉y , b∈z)
       nxy nyz
+
+LFSet<-dec : ∀ {ℓ} {A : 𝒰 ℓ}
+           → ⦃ da : is-discrete A ⦄
+           → {xs ys : LFSet A}
+           → Dec (LFSet< xs ys)
+LFSet<-dec {xs} {ys} =
+  Dec-× ⦃ da = Dec-⊆ₛ ⦄
+        ⦃ db = ≃→dec (∥-∥₁.ae $ Σ-ap-snd λ x → ×-swap) (Dec-anyₛ λ x → Dec-¬) ⦄
 
 LFSet<-size : ∀ {ℓ} {A : 𝒰 ℓ}
             → ⦃ da : is-discrete A ⦄

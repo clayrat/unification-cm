@@ -13,6 +13,7 @@ open import Data.Sum as Sum
 open import Data.Nat hiding (elim ; rec)
 open import Data.Nat.Order.Base
 open import Data.Nat.Two
+open import Data.Nat.Two.Properties
 open import Data.Maybe hiding (elim ; rec)
 
 open import Data.List hiding (elim ; rec ; drop ; empty?)
@@ -53,7 +54,7 @@ _∈ₛ?_ {A} z = rec go
 
 instance
   Reflects-∈ₛ? : ⦃ d : is-discrete A ⦄ {x : A} {xs : LFSet A}
-                  → Reflects (x ∈ₛ xs) (x ∈ₛ? xs)
+               → Reflects (x ∈ₛ xs) (x ∈ₛ? xs)
   Reflects-∈ₛ? ⦃ d ⦄ {x} {xs} = elim-prop go xs
     where
     go : Elim-prop λ q → Reflects (x ∈ₛ q) (x ∈ₛ? q)
@@ -304,6 +305,10 @@ opaque
          → rem x (y ∷ s) ＝ (if x =? y then rem x s else y ∷ rem x s)
   rem-∷ {x} {y} = if-swap {b = x =? y} ⁻¹
 
+  rem-∪∷ : ⦃ d : is-discrete A ⦄ → {x : A} {xs ys : LFSet A}
+         → rem x (xs ∪∷ ys) ＝ rem x xs ∪∷ rem x ys
+  rem-∪∷ {xs} = filter-∪∷ {xs = xs}
+
   -- TODO generalize to filter?
   rem-∉-eq : ⦃ d : is-discrete A ⦄ {s : LFSet A} {z : A}
          → z ∉ s → rem z s ＝ s
@@ -462,20 +467,49 @@ opaque
          → x ∈ (s ∩∷ t) → x ∈ t
   ∈-∩∷→r {s} {t} {x} x∈∩ = ∈-∩∷→l {t = s} (subst (x ∈ₛ_) (∩∷-comm {xs = s} {ys = t}) x∈∩)
 
+∉-∩∷ : ⦃ d : is-discrete A ⦄ → {s t : LFSet A} {x : A}
+      → x ∉ (s ∩∷ t) → (x ∉ s × x ∈ t) ⊎ (x ∈ s × x ∉ t) ⊎ (x ∉ s × x ∉ t)
+∉-∩∷ {s} {t} {x} x∉∩ with x ∈? s
+∉-∩∷ {s} {t} {x} x∉∩ | yes x∈s with x ∈? t
+∉-∩∷ {s} {t} {x} x∉∩ | yes x∈s | yes x∈t = absurd (x∉∩ (∈-∩∷← x∈s x∈t))
+∉-∩∷ {s} {t} {x} x∉∩ | yes x∈s | no x∉t  = inr $ inl (x∈s , x∉t)
+∉-∩∷ {s} {t} {x} x∉∩ | no x∉s  with x ∈? t
+∉-∩∷ {s} {t} {x} x∉∩ | no x∉s | yes x∈t = inl (x∉s , x∈t)
+∉-∩∷ {s} {t} {x} x∉∩ | no x∉s | no x∉t  = inr $ inr (x∉s , x∉t)
+
+∩∷-∉-l : ⦃ d : is-discrete A ⦄ → {s t : LFSet A} {x : A}
+       → x ∉ s → x ∉ (s ∩∷ t)
+∩∷-∉-l = contra ∈-∩∷→l
+
+∩∷-∉-r : ⦃ d : is-discrete A ⦄ → {s t : LFSet A} {x : A}
+       → x ∉ t → x ∉ (s ∩∷ t)
+∩∷-∉-r = contra ∈-∩∷→r
+
 -- size
 
 calc : ⦃ d : is-discrete A ⦄ → A → LFSet A → ℕ
 calc x xs = bit (not (x ∈ₛ? xs))
 
+calc-∪∷ : ⦃ d : is-discrete A ⦄ {x : A} {xs ys : LFSet A}
+        → calc x (xs ∪∷ ys) ＝ calc x xs · calc x ys
+calc-∪∷ {x} {xs} {ys} =
+    ap (bit ∘ not) (∈ₛ?-∪∷ {s₁ = xs})
+  ∙ ap bit (not-or (x ∈ₛ? xs) (x ∈ₛ? ys))
+  ∙ bit-and (not (x ∈ₛ? xs)) (not (x ∈ₛ? ys))
+
 calc-filter= : ⦃ d : is-discrete A ⦄ {p : A → Bool} {x : A} {xs : LFSet A}
              → ⌞ p x ⌟ → calc x (filterₛ p xs) ＝ calc x xs
 calc-filter= {p} {x} {xs} px with Dec-∈ₛ {a = x} {xs = filterₛ p xs}
 ... | yes x∈f =
-  ap (bit ∘ not) (  (so≃is-true $ true→so! x∈f)
-                 ∙ (so≃is-true $ true→so! $ filter-⊆ x∈f) ⁻¹)
+  ap (bit ∘ not) (  (true→is-true x∈f)
+                 ∙ (true→is-true $ filter-⊆ x∈f) ⁻¹)
 ... | no x∉f =
-  ap (bit ∘ not) (  (¬so≃is-false $ so-not $ false→so! x∉f)
-                  ∙ (¬so≃is-false $ so-not $ false→so! (contra (∈-filterₛ px) x∉f)) ⁻¹)
+  ap (bit ∘ not) (  (false→is-false x∉f)
+                  ∙ (false→is-false (contra (∈-filterₛ px) x∉f)) ⁻¹)
+
+calc-rem : ⦃ d : is-discrete A ⦄ {x : A} {xs : LFSet A}
+         → calc x (rem x xs) ＝ 1
+calc-rem = ap (bit ∘ not) (false→is-false (∉-rem (inl refl)))
 
 opaque
   sizeₛ : ⦃ d : is-discrete A ⦄ → LFSet A → ℕ
@@ -528,6 +562,48 @@ opaque
 
   size-sng : ⦃ d : is-discrete A ⦄ → {x : A} → sizeₛ (sng x) ＝ 1
   size-sng {x} = size-∷ {x = x} {s = []} ∙ ap (suc ∘ sizeₛ) rem-[]
+
+  size-∪∷ : ⦃ d : is-discrete A ⦄ → {xs ys : LFSet A}
+          → sizeₛ xs ≤ sizeₛ (xs ∪∷ ys)
+  size-∪∷ {A} {xs} {ys} = elim-prop go xs ys
+    where
+    go : Elim-prop λ q → (ys : LFSet A) → sizeₛ q ≤ sizeₛ (q ∪∷ ys)
+    go .[]ʳ _ = z≤
+    go .∷ʳ x {xs} ih ys =
+      ≤-trans
+         (≤-+ (=→≤ (   ·-id-r (calc x xs) ⁻¹
+                    ∙  ap (calc x xs ·_) (calc-rem ⁻¹)
+                    ∙ calc-∪∷ {xs = xs} ⁻¹))
+              (ih (rem x ys)))
+         (=→≤ (ap sizeₛ (  ap (x ∷_) (∪∷-comm {x = xs} {y = rem x ys})
+                         ∙ ap (_∪∷ xs) ∷-rem ⁻¹
+                         ∙ ap (x ∷_) (∪∷-comm {x = ys} {y = xs}))))
+    go .truncʳ _ = hlevel!
+
+  size-∪∷-⊆ : ⦃ d : is-discrete A ⦄ → {xs ys : LFSet A}
+             → sizeₛ (xs ∪∷ ys) ＝ sizeₛ xs
+             → ys ⊆ xs
+  size-∪∷-⊆ {A} {xs} {ys} = elim-prop go ys xs
+    where
+    go : Elim-prop λ q → (xs : LFSet A) → sizeₛ (xs ∪∷ q) ＝ sizeₛ xs → q ⊆ xs
+    go .[]ʳ _ _ = false! ⦃ Refl-x∉ₛ[] ⦄
+    go .∷ʳ y {xs = ys} ih xs e x∈∷ with y ∈? xs
+    ... | yes y∈xs =
+            [ (λ x=y  → subst (_∈ₛ xs) (x=y ⁻¹) y∈xs)
+            , (ih xs (ap sizeₛ (ap (_∪∷ ys) (∈ₛ-∷= y∈xs ⁻¹) ∙ ∪∷-swap {s = xs}) ∙ e))
+            ]ᵤ (∈ₛ-∷→ x∈∷)
+    ... | no  y∉xs =
+             absurd ((≤≃≯ $ size-∪∷ {xs = xs})
+                          (<≃suc≤ $ =→≤ $   ap (λ q → suc $ sizeₛ (q ∪∷ rem y ys)) (rem-∉-eq y∉xs ⁻¹)
+                                          ∙ ap (suc ∘ sizeₛ) (rem-∪∷ {xs = xs} ⁻¹)
+                                          ∙ size-∷ {s = xs ∪∷ ys} ⁻¹
+                                          ∙ ap sizeₛ (∪∷-swap {s = xs})
+                                          ∙ e))
+    go .truncʳ _ = hlevel!
+
+  size-⊆ : ⦃ d : is-discrete A ⦄ → {xs ys : LFSet A}
+         → xs ⊆ ys → sizeₛ xs ≤ sizeₛ ys
+  size-⊆ {xs} xs⊆ys = subst (λ q → sizeₛ xs ≤ sizeₛ q) (⊆-∪= xs⊆ys) (size-∪∷ {xs = xs})
 
   -- TODO can we drop truncation?
   size>0-∈ : ⦃ d : is-discrete A ⦄ → {s : LFSet A} → 0 < sizeₛ s → ∃[ x ꞉ A ] x ∈ s
@@ -614,12 +690,28 @@ filter-size-neg {p} {s} {z} npz z∈ =
 
 opaque
   unfolding rem
-  rem-size-neg : ⦃ d : is-discrete A ⦄ {s : LFSet A} {z : A}
-               → z ∈ s → sizeₛ (rem z s) < sizeₛ s
-  rem-size-neg {z} z∈ =
-    filter-size-neg
-      (subst So (not-invol (z =? z) ⁻¹) (true→so! ⦃ Reflects-does {P = z ＝ z} ⦄ refl))
-      z∈
+  rem-size-∈ : ⦃ d : is-discrete A ⦄ {s : LFSet A} {z : A}
+               → z ∈ s → sizeₛ s ＝ suc (sizeₛ (rem z s))
+  rem-size-∈ {s} z∈s =
+      ap sizeₛ (rem-∈-eq z∈s ⁻¹)
+    ∙ size-∷
+    ∙ ap (suc ∘ sizeₛ) (filter-idem {s = s})
+
+opaque
+  unfolding _∩∷_
+  size-∩∷ : ⦃ d : is-discrete A ⦄ → {xs ys : LFSet A}
+          → sizeₛ (xs ∩∷ ys) ≤ sizeₛ xs
+  size-∩∷ = filter-size≤
+
+  size-∩∷-⊆ : ⦃ d : is-discrete A ⦄ → {xs ys : LFSet A}
+             → sizeₛ (xs ∩∷ ys) ＝ sizeₛ xs
+             → xs ⊆ ys
+  size-∩∷-⊆ e = so→true! ∘ all←filter-size= e
+
+size-≥-⊆ : ⦃ d : is-discrete A ⦄ → {xs ys : LFSet A}
+          → xs ⊆ ys → sizeₛ xs ＝ sizeₛ ys → ys ⊆ xs
+size-≥-⊆ {A} {xs} {ys} xs⊆ys se =
+  size-∪∷-⊆ (ap sizeₛ (⊆-∪= xs⊆ys) ∙ se ⁻¹)
 
 opaque
   unfolding mapₛ

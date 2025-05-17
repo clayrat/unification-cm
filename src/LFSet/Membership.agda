@@ -230,7 +230,7 @@ unconsₛ {z} {x} {xs} {B} bp f g z∈∷ =
           , (λ q → ∣ inr (∈ₛ⇉ (sub (⇉∈ₛ (erase q))) .erased) ∣₁) ]ᵤ
           (∈ₛ⇉ x∈ .erased))
 
-⊆-∪∷-l : {z : A} {xs ys zs : LFSet A}
+⊆-∪∷-l : {xs ys zs : LFSet A}
        → ys ⊆ zs → (xs ∪∷ ys) ⊆ (xs ∪∷ zs)
 ⊆-∪∷-l {xs} {ys} {zs} yzs = elim-prop go xs
   where

@@ -14,6 +14,8 @@ open import Data.Nat hiding (elim ; rec)
 open import Data.Nat.Order.Base
 open import Data.Nat.Two
 
+open import Data.Maybe hiding (rec)
+open import Data.Maybe.Correspondences.Unary.Any renaming (here to hereₘ)
 open import Data.List hiding ([] ; rec ; drop)
 open import Data.List.Correspondences.Unary.Any
 open import Data.List.Membership
@@ -228,6 +230,15 @@ unconsₛ {z} {x} {xs} {B} bp f g z∈∷ =
           , (λ q → ∣ inr (∈ₛ⇉ (sub (⇉∈ₛ (erase q))) .erased) ∣₁) ]ᵤ
           (∈ₛ⇉ x∈ .erased))
 
+⊆-∪∷-l : {z : A} {xs ys zs : LFSet A}
+       → ys ⊆ zs → (xs ∪∷ ys) ⊆ (xs ∪∷ zs)
+⊆-∪∷-l {xs} {ys} {zs} yzs = elim-prop go xs
+  where
+  go : Elim-prop λ q → (q ∪∷ ys) ⊆ (q ∪∷ zs)
+  go .[]ʳ      = yzs
+  go .∷ʳ x     = ⊆-∷
+  go .truncʳ _ = hlevel!
+
 ⊆-∪=ᴱ : {xs ys : LFSet A}
        → xs ⊆ ys → Erased (xs ∪∷ ys ＝ ys)
 ⊆-∪=ᴱ {xs} {ys} = elim-prop go xs
@@ -248,12 +259,33 @@ set-extᴱ {xs} {ys} e =
          ∙ ∪∷-comm {x = ys}
          ∙ ⊆-∪=ᴱ {xs = xs} (λ {x} x∈xs → e x $ x∈xs) .erased)
 
-∈-list : {x : A} {xs : List A}
-        → x ∈ xs → x ∈ₛ from-list xs
+-- maybe
+
+∈-maybe : {xm : Maybe A}
+          {x : A} → x ∈ xm → x ∈ₛ from-maybe xm
+∈-maybe {xm = just x} (hereₘ e) = hereₛ e
+
+maybe-∈ᴱ : {xm : Maybe A}
+           {x : A} → x ∈ₛ from-maybe xm → Erased ∥ x ∈ xm ∥₁
+maybe-∈ᴱ {xm = just x} x∈ =
+  erase $
+  rec! (λ e → ∣ hereₘ e ∣₁)
+    (∈ₛ∷-∉ᴱ x∈ ∉ₛ[] .erased)
+
+∉-maybe : {xm : Maybe A}
+          {x : A} → x ∉ xm → x ∉ from-maybe xm
+∉-maybe {xm = nothing} x∉ = ∉ₛ[]
+∉-maybe {xm = just x}  x∉ = ∉ₛ-∷ (contra hereₘ x∉) ∉ₛ[]
+
+-- list
+
+∈-list : {xs : List A}
+         {x : A} → x ∈ xs → x ∈ₛ from-list xs
 ∈-list {xs = x ∷ xs} (here px)  = hereₛ px
 ∈-list {xs = x ∷ xs} (there xi) = thereₛ (∈-list xi)
 
-list-∈ᴱ : {x : A} {xs : List A} → x ∈ₛ from-list xs → Erased ∥ x ∈ xs ∥₁
+list-∈ᴱ : {xs : List A}
+          {x : A} → x ∈ₛ from-list xs → Erased ∥ x ∈ xs ∥₁
 list-∈ᴱ {xs = x ∷ xs} x∈ =
   erase $
   rec!
@@ -262,12 +294,15 @@ list-∈ᴱ {xs = x ∷ xs} x∈ =
     ]ᵤ
     (∈ₛ-∷→ᴱ x∈ .erased)
 
-∉-list : {x : A} {xs : List A} → x ∉ xs → x ∉ from-list xs
+∉-list : {xs : List A}
+         {x : A} → x ∉ xs → x ∉ from-list xs
 ∉-list {xs = List.[]} x∉ = ∉ₛ[]
 ∉-list {xs = x ∷ xs}  x∉ = ∉ₛ-∷ (contra here x∉) (∉-list (contra there x∉))
 
-∈-vec : {n : ℕ} {x : A} {xs : Vec A n}
-       → x ∈ xs → x ∈ₛ from-vec xs
+-- vec
+
+∈-vec : {n : ℕ} {xs : Vec A n}
+        {x : A} → x ∈ xs → x ∈ₛ from-vec xs
 ∈-vec {n = suc n} {xs = x ∷ xs} =
   [ hereₛ
   , thereₛ ∘ ∈-vec {xs = xs}

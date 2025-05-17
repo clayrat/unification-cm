@@ -15,6 +15,7 @@ open import Data.Nat.Order.Base
 open import Data.Nat.Two
 open import Data.Nat.Two.Properties
 open import Data.Maybe hiding (elim ; rec)
+open import Data.Maybe.Correspondences.Unary.Any renaming (here to hereₘ)
 
 open import Data.List hiding (elim ; rec ; drop ; empty?)
 open import Data.List.Correspondences.Unary.Unique
@@ -142,9 +143,14 @@ set-ext {xs} {ys} e =
   ∙ ∪∷-comm {x = ys}
   ∙ ⊆-∪= {xs = xs} (λ {x} x∈xs → e x $ x∈xs)
 
+maybe-∈ : ⦃ d : is-discrete A ⦄
+        → {xm : Maybe A}
+        → {z : A} → z ∈ₛ from-maybe xm → z ∈ xm
+maybe-∈ {xm = just x} z∈ = hereₘ $ ∈ₛ∷-∉ z∈ ∉ₛ[]
+
 list-∈ : ⦃ d : is-discrete A ⦄
-        → {z : A} {xs : List A}
-        → z ∈ₛ from-list xs → z ∈ xs
+       → {xs : List A}
+       → {z : A} → z ∈ₛ from-list xs → z ∈ xs
 list-∈ {xs = List.[]} x∈ = absurd (∉ₛ[] x∈)
 list-∈ {xs = x ∷ xs}  x∈ =
   [ here
@@ -152,8 +158,8 @@ list-∈ {xs = x ∷ xs}  x∈ =
   ]ᵤ (∈ₛ-∷→ x∈)
 
 vec-∈ : ⦃ d : is-discrete A ⦄
-      → {n : ℕ} {z : A} {xs : Vec A n}
-      → z ∈ₛ from-vec xs → z ∈ xs
+      → {n : ℕ} {xs : Vec A n}
+      → {z : A} → z ∈ₛ from-vec xs → z ∈ xs
 vec-∈ {n = 0} {xs = Vec.[]} x∈ = absurd (∉ₛ[] x∈)
 vec-∈ {n = suc n} {xs = x ∷ xs}  x∈ =
   [ hereᵥ

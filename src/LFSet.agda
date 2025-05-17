@@ -599,6 +599,11 @@ opaque
 
 -- TODO foldable?
 
+-- maybe interaction
+
+from-maybe : Maybe A → LFSet A
+from-maybe = Maybe.rec [] sng
+
 -- list interaction
 
 from-list : List A → LFSet A

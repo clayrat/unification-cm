@@ -261,6 +261,11 @@ set-extᴱ {xs} {ys} e =
 
 -- maybe
 
+from-maybe-= : {xm : Maybe A}
+               {x : A}
+             → x ∈ xm → from-maybe xm ＝ sng x
+from-maybe-= {xm = just x} (hereₘ px) = ap sng (px ⁻¹)
+
 ∈-maybe : {xm : Maybe A}
           {x : A} → x ∈ xm → x ∈ₛ from-maybe xm
 ∈-maybe {xm = just x} (hereₘ e) = hereₛ e
@@ -568,3 +573,4 @@ opaque
       go .∷ʳ x ih l =
          ∩≃≤× ⁻¹ $ l (hereₛ refl) , ih (l ∘ thereₛ)
       go .truncʳ = hlevel!
+

@@ -8,11 +8,13 @@ open import Meta.Effect
 open import Data.Empty hiding (_≠_)
 open import Data.Bool
 open import Data.Reflects as Reflects
+open import Data.Reflects.Sigma as ReflectsΣ
 open import Data.Dec as Dec
 open import Data.Nat
 open import Data.Nat.Order.Base
 open import Data.Maybe as Maybe
 open import Data.Maybe.Instances.Map.Properties
+-- open import Data.Maybe.Correspondences.Unary.Any
 open import Data.Sum as ⊎
 open import Data.Vec.Inductive as Vec
 open import Data.Vec.Inductive.Correspondences.Unary.All
@@ -118,18 +120,18 @@ inj-size-graph {sq} {ts} inj with ts ∈? codomq sq
 inv-fun : ∀ {n} → Subq n → Vec Term n → Maybe Id
 inv-fun sq ts = map fst (extract1 (filterₛ (λ q → ts =? q .snd) (graphq sq)))
 
-inv-fun-just : ∀ {n} {sq : Subq n} {ts x}
-             → inv-fun sq ts ＝ just x
+inv-fun-just : ∀ {n} {sq : Subq n} {ts} {x : Id}
+             → x ∈ inv-fun sq ts
              → x ∈ sq .domq × (sq # x ＝ ts)
 inv-fun-just {sq} {x} e =
-  let ((y , qs) , (e′ , y=x)) = mapₘ=just e
-      xqs∈′ = subst ((x , qs) ∈_) (extract1-just e′ ⁻¹) (hereₛ (×-path (y=x ⁻¹) refl))
+  let ((y , qs) , (e′ , y=x)) = map-∈Σ fst e
+      xqs∈′ = subst ((x , qs) ∈_) (extract1-just e′ ⁻¹) (hereₛ (×-path y=x refl))
       (tse , xqs∈) = filter-∈ₛ xqs∈′
-    in
-    ∈-graphq {x = x} {sq = sq} $
-    subst (λ q → (x , q) ∈ₛ graphq sq)
-          (so→true! tse ⁻¹)
-          xqs∈
+    in      
+  ∈-graphq {x = x} {sq = sq} $
+  subst (λ q → (x , q) ∈ₛ graphq sq)
+        (so→true! tse ⁻¹)
+        xqs∈
 
 just-inv-fun : ∀ {n} {sq : Subq n} {x}
              → Injective (sq .funq)
@@ -137,7 +139,8 @@ just-inv-fun : ∀ {n} {sq : Subq n} {x}
              → inv-fun sq (sq # x) ＝ just x
 just-inv-fun {sq} inj x∈ =
   rec!
-    (λ y fe eq → ap (mapₘ fst) (ap extract1 fe ∙ extract1-x∷) ∙ ap just (inj eq))
+    (λ y fe eq →   ap (mapₘ fst) (ap extract1 fe ∙ ∈→true reflectsΣ-= extract1-x∷)
+                 ∙ ap just (inj eq))
     (filt-graph-∈ {sq = sq} inj (codom-∈ {sq = sq} refl x∈))
 
 inv-fun-inj-nothing : ∀ {n} {sq : Subq n} {ts}
@@ -209,7 +212,7 @@ inv-insq {ts} {z} {θ} urn ucn ts∉ z∉ =
                                          then (z , ts) ∷ filterₛ (λ q → qs =? q .snd) (graphq θ)
                                          else filterₛ (λ q → qs =? q .snd) (graphq θ))))}
             (λ qs=ts → ap (mapₘ fst)
-                          (  extract1-x∷ ⁻¹
+                          (  ∈→true reflectsΣ-= extract1-x∷ ⁻¹
                            ∙ ap (λ q → extract1 ((z , ts) ∷ q))
                                 (filter-none (λ where {x = (a , as)} as∈ →
                                                          false→so! (the (qs ≠ as)
@@ -344,11 +347,13 @@ invq-$q←-$q↦ {s} {ts} vd = elim-un go ts vd
   go             {s} .euf {ts} lt invj vd                      =
       ap (s $q↦_) ($q←-sj invj)
     ∙ $q↦-``
-    ∙ inv-fun-just {sq = s} invj .snd
+    ∙ inv-fun-just {sq = s} (=just→∈ invj) .snd
   go             {s} .eunj {ps} {qs} {ts} lt invn uj ihp ihq vd  =
-    let ce = couple-uncouple {ts = ts} uj in
+    let uj′ = =just→∈ uj
+        ce = couple-uncouple {ts = ts} uj′
+      in
       ap (s $q↦_) ($q←-ucj invn uj)
-    ∙ $q↦-ucj (unrepvar-couple {xs = inv-subq s $q← ps}) uncouple-couple
+    ∙ $q↦-ucj (unrepvar-couple {xs = inv-subq s $q← ps}) (∈→true reflectsΣ-= uncouple-couple)
     ∙ ap² couple
           (ihp λ x x∈p →
              vd x (subst (λ q → x ∈ₛ bindₛ vars (from-vec q)) ce $
@@ -356,7 +361,7 @@ invq-$q←-$q↦ {s} {ts} vd = elim-un go ts vd
           (ihq λ x x∈q →
              vd x (subst (λ q → x ∈ₛ bindₛ vars (from-vec q)) ce $
                    varsq-couple-r {xs = ps} x∈q))
-    ∙ couple-uncouple uj
+    ∙ couple-uncouple uj′
   go {n}         {s} .eunn {ts} lt invn un     vd              =
     let sz0 = uncouple-nothing-size {ts = ts} un in
       ap (s $q↦_) ($q←-un invn un)
@@ -364,7 +369,7 @@ invq-$q←-$q↦ {s} {ts} vd = elim-un go ts vd
         (λ q → unrepvar ts ＝ q → s $q↦ ts ＝ ts)
         (λ urvn → $q↦-un urvn un)
         (λ x urvj →
-           let tse = unrepvar-just-eq {ts = ts} urvj in
+           let tse = unrepvar-just-eq {ts = ts} (=just→∈ urvj) in
              ap (s $q↦_) tse
            ∙ $q↦-``
            ∙ s .cofq (vd x (subst (λ q → x ∈ₛ bindₛ vars (from-vec q))

@@ -8,11 +8,13 @@ open import Meta.Effect
 open import Data.Empty hiding (_≠_)
 open import Data.Bool
 open import Data.Reflects as Reflects
+open import Data.Reflects.Sigma as ReflectsΣ
 open import Data.Dec as Dec
 open import Data.Acc
 open import Data.Nat
 open import Data.Nat.Order.Base
 open import Data.Maybe as Maybe
+open import Data.Maybe.Correspondences.Unary.Any
 open import Data.Vec.Inductive as Vec
 open import Data.Vec.Inductive.Correspondences.Unary.All
 open import Data.Vec.Inductive.Operations.Properties
@@ -98,13 +100,16 @@ $q↦-[] = subst-refl {A = ℕ} {B = λ n → Vec Term n} {x = 0} []
 
 $q↦-urj : ∀ {n}
          → {ts : Vec Term n} {x : Id}
-         → unrepvar ts ＝ just x
+         → x ∈ unrepvar ts
          → {s : Subq n} → s $q↦ ts ＝ s $q↦? x ! ts
 $q↦-urj {n = zero}  {ts} urvj {s} =
-  let (t , e , _) = unrepvar-just {ts = ts} urvj in
-  false! $ e ⁻¹ ∙ ap unreplicate (size0-nil {xs = ts})
+  let (t , e , _) = unrepvar-just {ts = ts} urvj
+    in
+  false! $ ∈→true reflectsΣ-= e ⁻¹ ∙ ap unreplicate (size0-nil {xs = ts})
 $q↦-urj {n = suc n} {ts} urvj {s} =
-  elim-un-step-fj hlevel! (rec→elim→-un ($q↦-rec s)) urvj
+  elim-un-step-fj hlevel!
+                  (rec→elim→-un ($q↦-rec s))
+                  (∈→true reflectsΣ-= urvj)
 
 $q↦-ucj : ∀ {n}
             → {ts ps qs : Vec Term n}
@@ -131,7 +136,7 @@ $q↦-`` : ∀ {n} {s : Subq n} {x}
        → s $q↦ replicate n (`` x) ＝ s # x
 $q↦-`` {n = zero}  {s}     = $q↦-[] {s = s} ∙ size0-nil ⁻¹
 $q↦-`` {n = suc n} {s} {x} =
-    $q↦-urj (ap (_>>= unvar) (just-unreplicate {n = suc n} z<s)) {s = s}
+    $q↦-urj (∈ₘ-bind (just-unreplicate {n = suc n} {z = `` x} z<s) (here refl)) {s = s}
   ∙ Dec.elim
       {C = λ q → (if ⌊ q ⌋ then funq s x else replicate (suc n) (`` x)) ＝ s # x}
       (λ _ → refl)
@@ -187,13 +192,13 @@ subq-idq {n} {ts} = elim-un go ts
     ap {x = ts} (id↦q 0 $q↦_) size0-nil ∙ $q↦-[] {s = id↦q 0} ∙ size0-nil ⁻¹
   go {n = suc n} .eu[] {ts} e                    = false! e
   go {n}         .euf  {ts} {a} lt fj            =
-    $q↦-urj {ts = ts} fj {s = id↦q n}
-  go             .eunj          lt fn ej ihp ihq =
-    $q↦-ucj fn ej ∙ ap² couple ihp ihq ∙ couple-uncouple ej
+    $q↦-urj {ts = ts} (=just→∈ fj) {s = id↦q n}
+  go             .eunj {ps} {qs} lt fn ej ihp ihq =
+    $q↦-ucj fn ej ∙ ap² couple ihp ihq ∙ couple-uncouple (=just→∈ ej)
   go             .eunn          lt fn en         = $q↦-un fn en
 
 subq?-◇ : ∀ {n} {s1 s2 : Subq n} {x} {ts}
-        → unrepvar ts ＝ just x
+        → x ∈ unrepvar ts
         → (s1 ◇q s2) $q↦? x ! ts ＝ s1 $q↦ (s2 $q↦? x ! ts)
 subq?-◇ {s1} {s2} {x} {ts} fj =
     ap (λ q → if q then s1 $q↦ (s2 # x) else ts)
@@ -220,15 +225,17 @@ subq-◇ {s1} {s2} {ts} = elim-un go ts
     ∙ ap {y = ts} (λ q → s1 $q↦ (s2 $q↦ q)) (size0-nil ⁻¹)
   go {n = suc n}           .eu[] e = false! e
   go             {s1} {s2} .euf {ts}            lt fj           =
-      $q↦-urj fj
-    ∙ subq?-◇ {s2 = s2} {ts = ts} fj
-    ∙ ap (s1 $q↦_) ($q↦-urj fj ⁻¹)
+    let fj′ = =just→∈ fj in
+      $q↦-urj fj′
+    ∙ subq?-◇ {s2 = s2} {ts = ts} fj′
+    ∙ ap (s1 $q↦_) ($q↦-urj fj′ ⁻¹)
   go             {s1} {s2} .eunj {ps} {qs} {ts} lt fn ej ihp ihq =
       $q↦-ucj fn ej
     ∙ ap² couple ihp ihq
     ∙ $q↦-ucj {ps = s2 $q↦ ps}
          (unrepvar-couple {xs = s2 $q↦ ps})
-         uncouple-couple ⁻¹
+         (∈→true reflectsΣ-= uncouple-couple)
+         ⁻¹
     ∙ ap (s1 $q↦_) ($q↦-ucj fn ej ⁻¹)
   go {s1}                  .eunn                lt fn en        =
       $q↦-un fn en
@@ -249,7 +256,7 @@ subq-◇ {s1} {s2} {ts} = elim-un go ts
     (∪∷-assoc (h .domq))
 
 thinq-$? : ∀ {n} {xs} {s : Subq n} {x} {ts}
-         → unrepvar ts ＝ just x
+         → x ∈ unrepvar ts
          → thinq xs s $q↦? x ! ts ＝ s $q↦? x ! ts
 thinq-$? {n} {xs} {s} {x} {ts} urvj =
   let (t , urj , uvj) = unrepvar-just {ts = ts} urvj in
@@ -263,7 +270,7 @@ thinq-$? {n} {xs} {s} {x} {ts} urvj =
             {C = λ q → (if ⌊ q ⌋ then s # x else ts) ＝ ts}
             (λ _ →
                  s .cofq x∉s
-               ∙ ap (replicate n) (unvar-just uvj ⁻¹)
+               ∙ ap (replicate n) (∈→true Reflects-unvar uvj ⁻¹)
                ∙ unreplicate-just urj ⁻¹)
             (λ _ → refl)
             (x ∈? xs))
@@ -280,9 +287,10 @@ thinq-$↦ {xs} {f} {ts} = elim-un go ts
     ∙ ap {y = ts} (f $q↦_) (size0-nil ⁻¹)
   go {n = suc n}     .eu[] e = false! e
   go             {f} .euf {ts} lt urvj =
-      $q↦-urj urvj
-    ∙ thinq-$? {xs = xs} {s = f} urvj
-    ∙ $q↦-urj urvj ⁻¹
+    let urvj′ = =just→∈ urvj in
+      $q↦-urj urvj′
+    ∙ thinq-$? {xs = xs} {s = f} urvj′
+    ∙ $q↦-urj urvj′ ⁻¹
   go .eunj lt urvn uj ihp ihq =
       $q↦-ucj urvn uj
     ∙ ap² couple ihp ihq
@@ -341,17 +349,19 @@ varsq-eq {p} {s} {ts} = elim-un go ts
     ∙ (ap {x = ts} (s $q↦_) size0-nil ∙ $q↦-[] {s = s}) ⁻¹
   go {n = suc n}         .eu[] e = false! e
   go             {p} {s} .euf {ts} {a} lt urvj e =
-    let tse = unrepvar-just-eq {ts = ts} {x = a} urvj in
-      $q↦-urj urvj
+    let urvj′ = =just→∈ urvj
+        tse = unrepvar-just-eq {ts = ts} {x = a} urvj′
+      in
+      $q↦-urj urvj′
     ∙ ap (p $q↦? a !_) tse
     ∙ $q↦?-replicate-eq {p = p} {s = s} {x = a}
          (e $ subst (a ∈ₛ_)
                     (varsq-replicate lt ⁻¹ ∙ ap varsq tse ⁻¹)
                     (hereₛ refl))
     ∙ ap (s $q↦? a !_) (tse ⁻¹)
-    ∙ $q↦-urj urvj ⁻¹
+    ∙ $q↦-urj urvj′ ⁻¹
   go .eunj {ps} {qs} {ts} lt urvn uj ihp ihq e =
-    let ec = couple-uncouple {ts = ts} uj in
+    let ec = couple-uncouple {ts = ts} (=just→∈ uj) in
       $q↦-ucj urvn uj
     ∙ ap² couple
           (ihp λ {x} x∈ → e (subst (λ q → x ∈ₛ varsq q) ec (varsq-couple-l {xs = ps} x∈)))

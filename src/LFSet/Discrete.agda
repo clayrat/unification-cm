@@ -8,6 +8,7 @@ open import Meta.Effect
 open import Data.Empty hiding (_≠_ ; elim ; rec)
 open import Data.Dec as Dec hiding (elim ; rec)
 open import Data.Reflects as Reflects
+open import Data.Reflects.Sigma as ReflectsΣ
 open import Data.Bool as Bool hiding (elim ; rec)
 open import Data.Sum as Sum
 open import Data.Nat hiding (elim ; rec)
@@ -860,25 +861,34 @@ opaque
   extract1-[] : ⦃ d : is-discrete A ⦄ → extract1 (the (LFSet A) []) ＝ nothing
   extract1-[] = refl
 
-  extract1-x∷ : ⦃ d : is-discrete A ⦄ → {x : A} → extract1 (sng x) ＝ just x
-  extract1-x∷ {x} = ap (λ q → if empty? q then just x else nothing) rem-[]
+  extract1-x∷ : ⦃ d : is-discrete A ⦄ → {x : A} → x ∈ extract1 (sng x)
+  extract1-x∷ {x} = =just→∈ (ap (λ q → if empty? q then just x else nothing) rem-[])
 
   extract1-just : ⦃ d : is-discrete A ⦄
                 → {s : LFSet A} {x : A}
-                → extract1 s ＝ just x
+                → x ∈ extract1 s
                 → s ＝ sng x
   extract1-just {A} {s} {x} = elim-prop go s
     where
-      go : Elim-prop λ q → extract1 q ＝ just x → q ＝ sng x
+      go : Elim-prop λ q → x ∈ extract1 q → q ＝ sng x
       go .[]ʳ = false!
       go .∷ʳ x {xs} ih with empty? (rem x xs) | recall empty? (rem x xs)
       ... | true  | ⟪ eq ⟫ =
         λ e →   ∷-rem
               ∙ ap² {C = λ _ _ → LFSet A} _∷_
-                    (just-inj e)
+                    (just-inj (∈→true reflectsΣ-= e))
                     (so→true! ⦃ Reflects-empty? {A = A} {s = rem x xs} ⦄ (so≃is-true ⁻¹ $ eq))
       ... | false | _ = false!
       go .truncʳ _ = hlevel!
+
+  -- TODO is there a nicer way?
+  reflectsΣ-extract1 : ⦃ d : is-discrete A ⦄
+                     → {s : LFSet A} → ReflectsΣ (λ x → s ＝ sng x) (extract1 s)
+  reflectsΣ-extract1 {A} {s} =
+    ReflectsΣ.dmap
+      (λ x → extract1-just)
+      (λ x → contra λ e → =just→∈ (ap extract1 e ∙ ∈→true reflectsΣ-= extract1-x∷))
+      reflectsΣ-∈
 
   extract1-nothing : ⦃ d : is-discrete A ⦄
                    → {s : LFSet A}

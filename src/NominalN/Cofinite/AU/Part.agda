@@ -128,7 +128,7 @@ au-θ⇓-body lt ts ih with unreplicate ts | recall unreplicate ts
 au-θ⇓-body lt ts ih | just t  | _       = pure t , ∣ 0 , refl ∣₁
 au-θ⇓-body lt ts ih | nothing | ⟪ eqa ⟫ with uncouple ts | recall uncouple ts
 au-θ⇓-body lt ts ih | nothing | ⟪ eqa ⟫ | just (ps , qs) | ⟪ equ ⟫ =
-  let (l< , r<) = uncouple-sizes>0 {ts = ts} lt equ
+  let (l< , r<) = uncouple-sizes>0 {ts = ts} lt (=just→∈ equ)
       (resp , cnvp) = ih ps l<
       (resq , cnvq) = ih qs r<
     in
@@ -221,7 +221,7 @@ au-θ-miss-inv {n} lt ts unr unc θi θ θinj θe θd x xgt =
           ∙ runState-map
           ∙ ap (λ q → `` q .fst , q .snd)
                (  runState-bind
-                ∙ ap (λ q → runState (st-bind (λ _ → st-pure (q .fst .fst)) 
+                ∙ ap (λ q → runState (st-bind (λ _ → st-pure (q .fst .fst))
                                               (st-put ( new1 unfin-ℕ (q .fst .fst)
                                                       , insS ts (q .fst .fst) (q .fst .snd))))
                                      (q .snd)) runState-get
@@ -290,7 +290,7 @@ au-θᵏ-inv-body     lt ih▹ ts | just t  | ⟪ equr ⟫ =
     , xgt
 au-θᵏ-inv-body     lt ih▹ ts | nothing | ⟪ equr ⟫ with uncouple ts | recall uncouple ts
 au-θᵏ-inv-body {κ} lt ih▹ ts | nothing | ⟪ equr ⟫ | just (ps , qs) | ⟪ equc ⟫ =
-  let ec = couple-uncouple equc in
+  let ec = couple-uncouple (=just→∈ equc) in
   gAll-later λ α →
     all-map²ᵏ
       (λ {x} {y} → au-θ-⟶-inv lt ps qs ts (ec ⁻¹) x y)

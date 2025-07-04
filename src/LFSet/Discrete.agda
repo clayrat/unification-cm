@@ -373,6 +373,13 @@ opaque
   minus : ⦃ is-discrete A ⦄ → LFSet A → LFSet A → LFSet A
   minus xs ys = filterₛ (λ x → not (x ∈ₛ? ys)) xs
 
+  minus-[]-l : ⦃ d : is-discrete A ⦄ → {s : LFSet A} → minus [] s ＝ []
+  minus-[]-l = refl
+
+  minus-∷-l : ⦃ d : is-discrete A ⦄ {x : A} {s r : LFSet A}
+            → minus (x ∷ s) r ＝ (if not (x ∈ₛ? r) then x ∷ minus s r else minus s r)
+  minus-∷-l = refl
+
   minus-[]-r : ⦃ d : is-discrete A ⦄ → {s : LFSet A} → minus s [] ＝ s
   minus-[]-r = filter-all λ _ → oh
 
@@ -491,6 +498,130 @@ opaque
 ∩∷-∉-r : ⦃ d : is-discrete A ⦄ → {s t : LFSet A} {x : A}
        → x ∉ t → x ∉ (s ∩∷ t)
 ∩∷-∉-r = contra ∈-∩∷→r
+
+-- nub
+
+nub-accₛ : ⦃ d : is-discrete A ⦄
+          → LFSet A → LFSet A → LFSet A
+nub-accₛ {A} ⦃ d ⦄ = rec go
+  where
+  go : Rec A (LFSet A → LFSet A)
+  go .[]ʳ _ = []
+  go .∷ʳ h _ rec a = if h ∈ₛ? a then rec a else h ∷ rec (h ∷ a)
+  go .dropʳ x _ rec =
+    fun-ext λ a →
+      Dec.elim
+        {C = λ q → (if ⌊ q ⌋ then if ⌊ q ⌋ then rec a else x ∷ rec (x ∷ a) else x ∷ (if x ∈ₛ? (x ∷ a) then rec (x ∷ a) else x ∷ rec (x ∷ x ∷ a)))
+                 ＝ (if ⌊ q ⌋ then rec a else x ∷ rec (x ∷ a))}
+        (λ x∈a → refl)
+        (λ x∉a → ap (x ∷_) $ if-true (true→so! {P = x ∈ (x ∷ a)} (hereₛ refl)))
+        (x ∈? a)
+  go .swapʳ x y _ rec =
+    fun-ext λ a →
+      Dec.elim
+        {C = λ q → (if ⌊ q ⌋ then if y ∈ₛ? a then rec a else y ∷ rec (y ∷ a) else x ∷ (if y ∈ₛ? (x ∷ a) then rec (x ∷ a) else y ∷ rec (y ∷ x ∷ a)))
+                 ＝ (if y ∈ₛ? a then if ⌊ q ⌋ then rec a else x ∷ rec (x ∷ a) else y ∷ (if x ∈ₛ? (y ∷ a) then rec (y ∷ a) else x ∷ rec (x ∷ y ∷ a)))}
+        (λ x∈a →
+           Dec.elim
+             {C = λ q → (if ⌊ q ⌋ then rec a else y ∷ rec (y ∷ a))
+                     ＝ (if ⌊ q ⌋ then rec a else y ∷ (if x ∈ₛ? (y ∷ a) then rec (y ∷ a) else x ∷ rec (x ∷ y ∷ a)))}
+             (λ y∈a → refl)
+             (λ y∉a → ap (y ∷_) $ if-true (true→so! (thereₛ x∈a)) ⁻¹)
+             (y ∈? a)
+        )
+        (λ x∉a →
+            Dec.elim
+             {P = y ∈ a}  -- why
+             {C = λ q → (x ∷ (if y ∈ₛ? (x ∷ a) then rec (x ∷ a) else y ∷ rec (y ∷ x ∷ a)))
+                     ＝ (if ⌊ q ⌋ then x ∷ rec (x ∷ a) else y ∷ (if x ∈ₛ? (y ∷ a) then rec (y ∷ a) else x ∷ rec (x ∷ y ∷ a)))}
+             (λ y∈a → ap (x ∷_) $ if-true (true→so! (thereₛ y∈a)))
+             (λ y∉a →
+                Dec.elim
+                  {C = λ q → (x ∷ (if y =? x or y ∈ₛ? a then rec (x ∷ a) else y ∷ rec (y ∷ x ∷ a)))
+                          ＝ (y ∷ (if ⌊ q ⌋ or x ∈ₛ? a then rec (y ∷ a) else x ∷ rec (x ∷ y ∷ a)))}
+                  (λ x=y → ap² {C = λ _ _ → LFSet A}
+                               _∷_ x=y (  if-true (or-so-l (true→so! (x=y ⁻¹)))
+                                        ∙ ap (λ q → rec (q ∷ a)) x=y))
+                  (λ x≠y →   ap (x ∷_) (if-false (subst So (not-or (y =? x) (y ∈ₛ? a) ⁻¹) $
+                                                  and-so-intro (false→so! (x≠y ∘ _⁻¹)) (false→so! y∉a)))
+                            ∙ swap
+                            ∙ ap {B = λ _ → LFSet A}
+                                 (λ q → y ∷ x ∷ rec q) swap
+                            ∙ ap (y ∷_) (if-false (false→so! x∉a) ⁻¹))
+                  (x ≟ y)
+             )
+             (y ∈? a)
+        )
+        (x ∈? a)
+  go .truncʳ = hlevel 2
+
+nubₛ : ⦃ d : is-discrete A ⦄
+     → LFSet A → LFSet A
+nubₛ xs = nub-accₛ xs []
+
+nub-accₛ-⊆-minus : ⦃ d : is-discrete A ⦄
+                 → (xs : LFSet A) (a : LFSet A)
+                 → nub-accₛ xs a ⊆ minus xs a
+nub-accₛ-⊆-minus {A} ⦃ d ⦄ = elim-prop go
+  where
+  go : Elim-prop λ q → (a : LFSet A) → nub-accₛ q a ⊆ minus q a
+  go .[]ʳ a = false! ⦃ Refl-x∉ₛ[] ⦄
+  go .∷ʳ x {xs} ih a {x = z} =
+    Dec.elim
+      {C = λ q → z ∈ₛ (if ⌊ q ⌋ then nub-accₛ xs a else x ∷ nub-accₛ xs (x ∷ a)) → z ∈ₛ minus (x ∷ xs) a}
+      (λ x∈a →   subst (z ∈ₛ_)
+                       (  if-false (subst So (not-invol (x ∈ₛ? a) ⁻¹) (true→so! x∈a)) ⁻¹
+                        ∙ minus-∷-l ⁻¹)
+               ∘ ih a)
+      (λ x∉a → subst (z ∈ₛ_)
+                       (  if-true (false→so! x∉a) ⁻¹
+                        ∙ minus-∷-l ⁻¹) ∘
+               [ hereₛ
+               ,   thereₛ
+                 ∘ rem-⊆
+                 ∘ subst (z ∈ₛ_) minus-∷-r
+                 ∘ ih (x ∷ a)
+               ]ᵤ ∘ ∈ₛ-∷→)
+      (x ∈? a)
+  go .truncʳ x = hlevel!
+
+nub-accₛ-⊇-minus : ⦃ d : is-discrete A ⦄
+                 → (xs : LFSet A) (a : LFSet A)
+                 → minus xs a ⊆ nub-accₛ xs a
+nub-accₛ-⊇-minus {A} ⦃ d ⦄ = elim-prop go
+  where
+  go : Elim-prop λ q → (a : LFSet A) → minus q a ⊆ nub-accₛ q a
+  go .[]ʳ a {x = z} = subst (z ∈_) minus-[]-l
+  go .∷ʳ x {xs} ih a {x = z} =
+    Dec.elim
+      {C = λ q → z ∈ₛ minus (x ∷ xs) a → z ∈ₛ (if ⌊ q ⌋ then nub-accₛ xs a else x ∷ nub-accₛ xs (x ∷ a)) }
+      (λ x∈a →   ih a
+               ∘ subst (z ∈ₛ_)
+                       (  minus-∷-l
+                         ∙ if-false (subst So (not-invol (x ∈ₛ? a) ⁻¹) (true→so! x∈a))))
+      (λ x∉a →   [ hereₛ
+                 ,   thereₛ
+                   ∘ ih (x ∷ a)
+                   ∘ subst (z ∈_) (minus-∷-r ⁻¹)
+                 ]ᵤ
+               ∘ ∈ₛ-∷→
+               ∘ subst (z ∈ₛ_)
+                       (  minus-∷-l
+                        ∙ if-true (false→so! x∉a)
+                        ∙ ∷-rem))
+      (x ∈? a)
+  go .truncʳ x = hlevel!
+
+nub-accₛ-=-minus : ⦃ d : is-discrete A ⦄
+                 → (xs : LFSet A) (a : LFSet A)
+                 → nub-accₛ xs a ＝ minus xs a
+nub-accₛ-=-minus xs a =
+  set-ext λ z → prop-extₑ! (nub-accₛ-⊆-minus xs a) (nub-accₛ-⊇-minus xs a)
+
+nubₛ-= : ⦃ d : is-discrete A ⦄
+       → (xs : LFSet A)
+       → nubₛ xs ＝ xs
+nubₛ-= xs = nub-accₛ-=-minus xs [] ∙ minus-[]-r
 
 -- size
 

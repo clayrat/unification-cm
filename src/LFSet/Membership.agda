@@ -239,6 +239,13 @@ unconsₛ {z} {x} {xs} {B} bp f g z∈∷ =
   go .∷ʳ x     = ⊆-∷
   go .truncʳ _ = hlevel!
 
+⊆-∪∷-r : {xs ys zs : LFSet A}
+       → xs ⊆ ys → (xs ∪∷ zs) ⊆ (ys ∪∷ zs)
+⊆-∪∷-r {xs} {ys} {zs} xys {x} =
+  subst (x ∈_) (∪∷-comm {x = zs}) ∘
+  ⊆-∪∷-l {xs = zs} xys ∘
+  subst (x ∈_) (∪∷-comm {x = xs})
+
 ⊆-∪=ᴱ : {xs ys : LFSet A}
        → xs ⊆ ys → Erased (xs ∪∷ ys ＝ ys)
 ⊆-∪=ᴱ {xs} {ys} = elim-prop go xs
@@ -573,4 +580,3 @@ opaque
       go .∷ʳ x ih l =
          ∩≃≤× ⁻¹ $ l (hereₛ refl) , ih (l ∘ thereₛ)
       go .truncʳ = hlevel!
-

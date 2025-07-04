@@ -593,7 +593,7 @@ nub-accₛ-⊇-minus {A} ⦃ d ⦄ = elim-prop go
   go : Elim-prop λ q → (a : LFSet A) → minus q a ⊆ nub-accₛ q a
   go .[]ʳ a {x = z} = subst (z ∈_) minus-[]-l
   go .∷ʳ x {xs} ih a {x = z} =
-    Dec.elim
+        Dec.elim
       {C = λ q → z ∈ₛ minus (x ∷ xs) a → z ∈ₛ (if ⌊ q ⌋ then nub-accₛ xs a else x ∷ nub-accₛ xs (x ∷ a)) }
       (λ x∈a →   ih a
                ∘ subst (z ∈ₛ_)

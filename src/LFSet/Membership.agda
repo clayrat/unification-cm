@@ -266,6 +266,42 @@ set-extᴱ {xs} {ys} e =
          ∙ ∪∷-comm {x = ys}
          ∙ ⊆-∪=ᴱ {xs = xs} (λ {x} x∈xs → e x $ x∈xs) .erased)
 
+-- disjointness
+-- TODO typeclass
+
+_∥ₛ_ : LFSet A → LFSet A → Type (level-of-type A)
+_∥ₛ_ {A} xs ys = ∀[ a ꞉ A ] (a ∈ xs → a ∈ ys → ⊥)
+
+∥ₛ-comm : {xs ys : LFSet A} → xs ∥ₛ ys → ys ∥ₛ xs
+∥ₛ-comm dxy hy hx = dxy hx hy
+
+[]-∥ₛ-l : {xs : LFSet A} → [] ∥ₛ xs
+[]-∥ₛ-l = false!
+
+[]-∥ₛ-r : {xs : LFSet A} → xs ∥ₛ []
+[]-∥ₛ-r _ = false!
+
+∥ₛ-∷-l→ : ∀ {z} {xs ys : LFSet A} → z ∉ ys → xs ∥ₛ ys → (z ∷ xs) ∥ₛ ys
+∥ₛ-∷-l→ {z} {xs} {ys} ny dxy hx hy =
+  Recomputable-⊥ .recompute $ erase $
+  rec! [ (λ x=z → ny (subst (_∈ ys) x=z hy))
+       , (λ hx′ → dxy hx′ hy) ]ᵤ
+       (∈ₛ-∷→ᴱ hx .erased)
+
+∥ₛ-∷-l← : ∀ {z} {xs ys : LFSet A} → (z ∷ xs) ∥ₛ ys → z ∉ ys × xs ∥ₛ ys
+∥ₛ-∷-l← {z} {xs} {ys} dzxy =
+    (dzxy (hereₛ refl))
+  , (dzxy ∘ thereₛ)
+
+∥ₛ-∷-r→ : ∀ {y} {xs ys : LFSet A} → y ∉ xs → xs ∥ₛ ys → xs ∥ₛ (y ∷ ys)
+∥ₛ-∷-r→ nx = ∥ₛ-comm ∘ ∥ₛ-∷-l→ nx ∘ ∥ₛ-comm
+
+∥ₛ→¬≬ : {xs ys : LFSet A} → xs ∥ₛ ys → (¬ xs ≬ ys)
+∥ₛ→¬≬ p (a , a∈x , a∈y) = p a∈x a∈y
+
+¬≬→∥ₛ : {xs ys : LFSet A} → (¬ xs ≬ ys) → xs ∥ₛ ys
+¬≬→∥ₛ nd {x = a} a∈x a∈y = nd (a , a∈x , a∈y)
+
 -- maybe
 
 from-maybe-= : {xm : Maybe A}

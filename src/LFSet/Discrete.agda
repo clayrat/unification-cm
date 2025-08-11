@@ -110,6 +110,19 @@ sng-∈ x∈ = ∈ₛ∷-∉ x∈ ∉ₛ[]
   go .∷ʳ x {xs} ih = ap ((z =? x) or_) ih ∙ or-assoc (z =? x) (z ∈ₛ? xs) (z ∈ₛ? s₂) ⁻¹
   go .truncʳ x = hlevel!
 
+∈ₛ?-filter : ⦃ d : is-discrete A ⦄ {z : A} {p : A → Bool} {s : LFSet A}
+           → z ∈ₛ? filterₛ p s ＝ p z and (z ∈ₛ? s)
+∈ₛ?-filter {z} {p} {s} =
+  so→true! $
+  subst So (biimplies-equals (z ∈ₛ? filterₛ p s) (p z and (z ∈ₛ? s))) $
+  and-so-≃ {x = (z ∈ₛ? filterₛ p s) implies p z and (z ∈ₛ? s)} ⁻¹ $
+    true→so! ⦃ reflects-implies ⦄
+             (λ zf → let (pz , zm) = filter-∈ₛ (so→true! zf) in
+                     and-so-≃ ⁻¹ $ pz , true→so! zm)
+  , true→so! ⦃ reflects-implies ⦄
+             (λ pz → let pzzm = and-so-≃ $ pz in
+                     true→so! (∈-filterₛ (pzzm .fst) (so→true! (pzzm .snd))))
+
 ∈ₛ-∷= : ⦃ d : is-discrete A ⦄
       → {z : A} {s : LFSet A}
       → z ∈ₛ s → z ∷ s ＝ s
@@ -331,7 +344,7 @@ opaque
     go .truncʳ x = hlevel!
 
   rem-∈-eq : ⦃ d : is-discrete A ⦄ {x : A} {s : LFSet A}
-         → x ∈ s → x ∷ rem x s ＝ s
+           → x ∈ s → x ∷ rem x s ＝ s
   rem-∈-eq {x} {s} x∈ =
       ap (_∪∷ rem x s)
          (  if-true (true→so! x∈) ⁻¹
@@ -364,6 +377,36 @@ opaque
   ⊆-rem {z} {x} x∈ with x ≟ z
   ... | yes x=z = hereₛ x=z
   ... | no x≠z = thereₛ (rem-∈-≠ x≠z x∈)
+
+  rem-idem : ⦃ d : is-discrete A ⦄ → {x : A} {s : LFSet A}
+            → rem x (rem x s) ＝ rem x s
+  rem-idem {s} = filter-idem {s = s}
+
+record Elim-rem-prop {A : 𝒰 ℓ} ⦃ d : is-discrete A ⦄ (P : LFSet A → 𝒰 ℓ′) : 𝒰 (ℓ ⊔ ℓ′) where
+  no-eta-equality
+  field
+    []rʳ    : P []
+    ∷rʳ     : ∀ x {xs} → x ∈ xs → P (rem x xs) → P xs
+    truncrʳ : ∀ x → is-prop (P x)
+
+elim-rem-prop : ⦃ d : is-discrete A ⦄ {P : LFSet A → 𝒰 ℓ′} → Elim-rem-prop P → (x : LFSet A) → P x
+elim-rem-prop ⦃ d ⦄ {P} e = elim-prop e′
+  where
+  module E = Elim-rem-prop e
+
+  e′ : Elim-prop P
+  e′ .[]ʳ = E.[]rʳ
+  e′ .∷ʳ x {xs} ih =
+    Dec.rec
+       (λ x∈xs → subst P (∈ₛ-∷= x∈xs ⁻¹) ih)
+       (λ x∉xs → E.∷rʳ x (hereₛ refl)
+                    (subst P (  rem-∉-eq x∉xs ⁻¹
+                              ∙ if-true (true→so! ⦃ d .Dec.proof ⦄ refl) ⁻¹
+                              ∙ rem-∷ ⁻¹) ih))
+       (x ∈? xs)
+  e′ .truncʳ x = E.truncrʳ x
+
+open Elim-rem-prop public
 
 -- difference and intersection
 
@@ -405,6 +448,13 @@ opaque
     filterₛ (not ∘ x =?_) (filterₛ (λ x → not (x ∈ₛ? r)) s)
       ∎
 
+  minus-∈ : ⦃ d : is-discrete A ⦄ {z : A} {xs ys : LFSet A}
+          → z ∈ minus xs ys
+          → z ∈ xs × z ∉ ys
+  minus-∈ {xs} z∈m =
+    let (pz , z∈) = filter-∈ₛ {s = xs} z∈m in
+    z∈ , so→false! pz
+
   minus-⊆ : ⦃ d : is-discrete A ⦄ {xs ys : LFSet A}
            → minus xs ys ⊆ xs
   minus-⊆ = filter-⊆
@@ -445,6 +495,10 @@ opaque
   ∩∷-zero-r : ⦃ d : is-discrete A ⦄ → {xs : LFSet A} → xs ∩∷ [] ＝ []
   ∩∷-zero-r {xs} = filter-none {s = xs} λ _ → oh
 
+  ∩∷-∷-l : ⦃ d : is-discrete A ⦄ → {x : A} {xs ys : LFSet A}
+         → (x ∷ xs) ∩∷ ys ＝ (if x ∈ₛ? ys then x ∷ (xs ∩∷ ys) else xs ∩∷ ys)
+  ∩∷-∷-l = refl
+
   ∩∷-idem : ⦃ d : is-discrete A ⦄ → {xs : LFSet A} → xs ∩∷ xs ＝ xs
   ∩∷-idem {xs} = filter-all {s = xs} true→so!
 
@@ -480,6 +534,57 @@ opaque
   ∈-∩∷→r : ⦃ d : is-discrete A ⦄ {s t : LFSet A} {x : A}
          → x ∈ (s ∩∷ t) → x ∈ t
   ∈-∩∷→r {s} {t} {x} x∈∩ = ∈-∩∷→l {t = s} (subst (x ∈ₛ_) (∩∷-comm {xs = s} {ys = t}) x∈∩)
+
+  filter-∩∷ : ⦃ d : is-discrete A ⦄ → ∀ {xs ys} {p : A → Bool}
+             → filterₛ p (xs ∩∷ ys) ＝ filterₛ p xs ∩∷ filterₛ p ys
+  filter-∩∷ {xs} {ys} {p} =
+      filter-and {s = xs} ⁻¹
+    ∙ ap (λ q → filterₛ q xs)
+         (fun-ext λ z →
+              ap (_and (z ∈ₛ? ys)) (and-idem (p z) ⁻¹)
+            ∙ and-assoc (p z) (p z) (z ∈ₛ? ys)
+            ∙ ap (p z and_) (∈ₛ?-filter {s = ys} ⁻¹)
+            ∙ and-comm (p z) (z ∈ₛ? filterₛ p ys))
+    ∙ filter-and {s = xs}
+
+  Reflects-∩∷-disjoint : ⦃ d : is-discrete A ⦄
+                       → {s t : LFSet A}
+                       → Reflects (s ∥ₛ t) (empty? $ s ∩∷ t)
+  Reflects-∩∷-disjoint ⦃ d ⦄ {s} {t} = elim-prop go s
+    where
+    go : Elim-prop λ q → Reflects (q ∥ₛ t) (empty? $ q ∩∷ t)
+    go .[]ʳ          = ofʸ λ {x} → false! ⦃ Refl-x∉ₛ[] ⦄ -- why
+    go .∷ʳ x {xs} ih =
+      Dec.elim
+        {C = λ q → Reflects ((x ∷ xs) ∥ₛ t) (empty? $ if ⌊ q ⌋ then x ∷ filterₛ (_∈ₛ? t) xs else filterₛ (_∈ₛ? t) xs) }
+        (λ x∈ → ofⁿ λ d → d (hereₛ refl) x∈)
+        (λ x∉ → Reflects.dmap (∥ₛ-∷-l→ x∉)
+                              (contra (snd ∘ ∥ₛ-∷-l←))
+                              ih)
+        (x ∈? t)
+    go .truncʳ q     = reflects-is-of-hlevel 0 $ hlevel 1
+
+Dec-disjoint : ⦃ d : is-discrete A ⦄
+             → {s t : LFSet A}
+             → Dec (s ∥ₛ t)
+Dec-disjoint {s} {t} .does  = empty? $ s ∩∷ t
+Dec-disjoint         .proof = Reflects-∩∷-disjoint
+
+opaque
+  unfolding rem
+  rem-∩∷ : ⦃ d : is-discrete A ⦄ → {x : A} {xs ys : LFSet A}
+         → rem x (xs ∩∷ ys) ＝ rem x xs ∩∷ rem x ys
+  rem-∩∷ = filter-∩∷
+
+opaque
+  unfolding _∩∷_ minus
+  ∩∷-minus-compl : ⦃ d : is-discrete A ⦄ → {xs ys : LFSet A}
+                 → (xs ∩∷ ys) ∪∷ minus xs ys ＝ xs
+  ∩∷-minus-compl = filter-compl
+
+  ∩∷-minus-∥ₛ : ⦃ d : is-discrete A ⦄ → {xs ys : LFSet A}
+               → (xs ∩∷ ys) ∥ₛ minus xs ys
+  ∩∷-minus-∥ₛ {xs} {ys} x∈∩ x∈m = minus-∈ {xs = xs} {ys = ys} x∈m .snd (∈-∩∷→r {s = xs} x∈∩)
 
 ∉-∩∷ : ⦃ d : is-discrete A ⦄ → {s t : LFSet A} {x : A}
       → x ∉ (s ∩∷ t) → (x ∉ s × x ∈ t) ⊎ (x ∈ s × x ∉ t) ⊎ (x ∉ s × x ∉ t)
@@ -709,8 +814,8 @@ opaque
     go .[]ʳ _ = z≤
     go .∷ʳ x {xs} ih ys =
       ≤-trans
-         (≤-+ (=→≤ (   ·-id-r (calc x xs) ⁻¹
-                    ∙  ap (calc x xs ·_) (calc-rem ⁻¹)
+         (≤-+ (=→≤ (  ·-id-r (calc x xs) ⁻¹
+                    ∙ ap (calc x xs ·_) (calc-rem ⁻¹)
                     ∙ calc-∪∷ {xs = xs} ⁻¹))
               (ih (rem x ys)))
          (=→≤ (ap sizeₛ (  ap (x ∷_) (∪∷-comm {x = xs} {y = rem x ys})
@@ -846,6 +951,67 @@ opaque
              → xs ⊆ ys
   size-∩∷-⊆ e = so→true! ∘ all←filter-size= e
 
+  size-∪∷-∩∷ : ⦃ d : is-discrete A ⦄ → {xs ys : LFSet A}
+            → sizeₛ (xs ∪∷ ys) + sizeₛ (xs ∩∷ ys) ＝ sizeₛ xs + sizeₛ ys
+  size-∪∷-∩∷ {A} {xs} {ys} = elim-rem-prop go xs ys
+    where
+    go : Elim-rem-prop λ q → (ys : LFSet A) → sizeₛ (q ∪∷ ys) + sizeₛ (q ∩∷ ys) ＝ sizeₛ q + sizeₛ ys
+    go .[]rʳ ys = +-comm (sizeₛ ys) (sizeₛ [])
+    go .∷rʳ x {xs} x∈ ih ys =
+        ap (λ q → sizeₛ (q ∪∷ ys) + sizeₛ (q ∩∷ ys)) (rem-∈-eq x∈ ⁻¹)
+      ∙ ap (_+ sizeₛ ((x ∷ rem x xs) ∩∷ ys)) size-∷
+      ∙ ap suc
+           (  ap (λ q → sizeₛ q + sizeₛ ((x ∷ rem x xs) ∩∷ ys))
+                 (rem-∪∷ {xs = rem x xs})
+            ∙ ap (λ q → sizeₛ (q ∪∷ rem x ys) + sizeₛ ((x ∷ rem x xs) ∩∷ ys))
+                 (rem-idem {s = xs})
+            ∙ ap (λ q → sizeₛ (rem x xs ∪∷ rem x ys) + sizeₛ q)
+                 (∩∷-∷-l {xs = rem x xs} {ys = ys})
+            ∙ Dec.elim
+               {C = λ q → sizeₛ (rem x xs ∪∷ rem x ys)
+                        + sizeₛ (if ⌊ q ⌋ then x ∷ (rem x xs ∩∷ ys) else (rem x xs ∩∷ ys))
+                        ＝ sizeₛ (rem x xs) + sizeₛ ys}
+               (λ x∈ys →   ap (sizeₛ (rem x xs ∪∷ rem x ys) +_) size-∷
+                         ∙ ap (λ q → sizeₛ (rem x xs ∪∷ rem x ys) + suc (sizeₛ q))
+                              (rem-∩∷ {xs = rem x xs} {ys = ys})
+                         ∙ ap (λ q → sizeₛ (rem x xs ∪∷ rem x ys) + suc (sizeₛ (q ∩∷ rem x ys)))
+                              (rem-idem {s = xs})
+                         ∙ +-suc-r _ _
+                         ∙ ap suc (  ih (rem x ys)
+                                   ∙ ap (λ q → sizeₛ (rem x xs) + sizeₛ q)
+                                        (rem-idem ⁻¹))
+                         ∙ +-suc-r _ _ ⁻¹
+                         ∙ ap (sizeₛ (rem x xs) +_) (size-∷ ⁻¹)
+                         ∙ ap (λ q → sizeₛ (rem x xs) + sizeₛ q)
+                              (rem-∈-eq x∈ys))
+               (λ x∉ys →   ap (λ q → sizeₛ (rem x xs ∪∷ rem x ys) + sizeₛ (rem x xs ∩∷ q))
+                              (rem-∉-eq x∉ys ⁻¹)
+                         ∙ ih (rem x ys)
+                         ∙ ap (λ q → sizeₛ (rem x xs) + sizeₛ q)
+                              (rem-∉-eq x∉ys))
+               (x ∈? ys)
+            ∙ ap (λ q → sizeₛ q + sizeₛ ys) (rem-idem {s = xs} ⁻¹))
+      ∙ ap (_+ sizeₛ ys) (size-∷ ⁻¹)
+      ∙ ap (λ q → sizeₛ q + sizeₛ ys) (rem-∈-eq x∈)
+    go .truncrʳ _ = hlevel!
+
+  size-∪∷-∥ₛ : ⦃ d : is-discrete A ⦄ → {xs ys : LFSet A}
+             → xs ∥ₛ ys
+             → sizeₛ (xs ∪∷ ys) ＝ sizeₛ xs + sizeₛ ys
+  size-∪∷-∥ₛ {xs} {ys} xdy =
+      +-zero-r _ ⁻¹
+    ∙ ap (sizeₛ (xs ∪∷ ys) +_)
+         ((  ap sizeₛ (so→true! ⦃ Reflects-empty? ⦄ $ true→so! ⦃ Reflects-∩∷-disjoint ⦄ xdy)
+           ∙ size-[]) ⁻¹)
+    ∙ size-∪∷-∩∷
+
+  size-minus-∩∷ : ⦃ d : is-discrete A ⦄ → {xs ys : LFSet A}
+                → sizeₛ (minus xs ys) + sizeₛ (xs ∩∷ ys) ＝ sizeₛ xs
+  size-minus-∩∷ {xs} {ys} =
+      +-comm (sizeₛ (minus xs ys)) _
+    ∙ size-∪∷-∥ₛ ∩∷-minus-∥ₛ ⁻¹
+    ∙ ap sizeₛ (∩∷-minus-compl {ys = ys})
+
 size-≥-⊆ : ⦃ d : is-discrete A ⦄ → {xs ys : LFSet A}
           → xs ⊆ ys → sizeₛ xs ＝ sizeₛ ys → ys ⊆ xs
 size-≥-⊆ {A} {xs} {ys} xs⊆ys se =
@@ -961,7 +1127,7 @@ opaque
       go .truncʳ = hlevel!
 
 opaque
-  unfolding empty?
+--  unfolding empty?
   -- extract the element if the set is a singleton
 
   extract1 : ⦃ d : is-discrete A ⦄ → LFSet A → Maybe A

@@ -165,28 +165,28 @@ elim-prop2 {A} {B} {P} e xs ys = elim {P = λ xs → ∀ ys → P xs ys} e′ xs
 
 -- empty?
 
-opaque
-  empty? : LFSet A → Bool
-  empty? = rec go
-    where
-    go : Rec A Bool
-    go .[]ʳ = true
-    go .∷ʳ _ _ _ = false
-    go .dropʳ x y p = refl
-    go .swapʳ x y z p = refl
-    go .truncʳ = hlevel!
+-- TODO should this be opaque?
+empty? : LFSet A → Bool
+empty? = rec go
+  where
+  go : Rec A Bool
+  go .[]ʳ = true
+  go .∷ʳ _ _ _ = false
+  go .dropʳ x y p = refl
+  go .swapʳ x y z p = refl
+  go .truncʳ = hlevel!
 
-  ∷≠[] : {x : A} {xs : LFSet A}
-       → x ∷ xs ≠ []
-  ∷≠[] = false! ∘ ap empty?
+∷≠[] : {x : A} {xs : LFSet A}
+     → x ∷ xs ≠ []
+∷≠[] = false! ∘ ap empty?
 
-  Reflects-empty? : {s : LFSet A} → Reflects (s ＝ []) (empty? s)
-  Reflects-empty? {A} {s} = elim-prop go s
-    where
-    go : Elim-prop {A = A} λ q → Reflects (q ＝ []) (empty? q)
-    go .[]ʳ = ofʸ refl
-    go .∷ʳ _ _ = ofⁿ ∷≠[]
-    go .truncʳ xs = hlevel!
+Reflects-empty? : {s : LFSet A} → Reflects (s ＝ []) (empty? s)
+Reflects-empty? {A} {s} = elim-prop go s
+  where
+  go : Elim-prop {A = A} λ q → Reflects (q ＝ []) (empty? q)
+  go .[]ʳ = ofʸ refl
+  go .∷ʳ _ _ = ofⁿ ∷≠[]
+  go .truncʳ xs = hlevel!
 
 -- singleton
 

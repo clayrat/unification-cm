@@ -101,27 +101,23 @@ sng-∈ x∈ = ∈ₛ∷-∉ x∈ ∉ₛ[]
 ... | yes z∈ = inl z∈
 ... | no z∉ = inr (∈ₛ∪∷-∉ z∈∷ z∉)
 
-∈ₛ?-∪∷ : ⦃ d : is-discrete A ⦄ {z : A} {s₁ s₂ : LFSet A}
-        →  z ∈ₛ? (s₁ ∪∷ s₂) ＝ (z ∈ₛ? s₁) or (z ∈ₛ? s₂)
-∈ₛ?-∪∷ {z} {s₁} {s₂} = elim-prop go s₁
-  where
-  go : Elim-prop λ q → z ∈ₛ? (q ∪∷ s₂) ＝ (z ∈ₛ? q) or (z ∈ₛ? s₂)
-  go .[]ʳ = refl
-  go .∷ʳ x {xs} ih = ap ((z =? x) or_) ih ∙ or-assoc (z =? x) (z ∈ₛ? xs) (z ∈ₛ? s₂) ⁻¹
-  go .truncʳ x = hlevel!
+∈ₛ?-∪∷ : ⦃ di : is-discrete A ⦄ {z : A} {s₁ s₂ : LFSet A}
+       → z ∈ₛ? (s₁ ∪∷ s₂) ＝ (z ∈ₛ? s₁) or (z ∈ₛ? s₂)
+∈ₛ?-∪∷ {z} {s₁} {s₂} =
+  so-injₑ $ prop-extₑ!
+    ([ or-so-l ∘ true→so!
+     , or-so-r ∘ true→so! ]ᵤ ∘ ∈ₛ-∪∷→ {xs = s₁} ∘ so→true!)
+    (true→so! ∘ [ ∈ₛ-∪∷←l {s₁ = s₁} {s₂ = s₂} ∘ so→true!
+                , ∈ₛ-∪∷←r {s₁ = s₁}           ∘ so→true! ]ᵤ ∘ or-so-elim {x = z ∈ₛ? s₁})
 
 ∈ₛ?-filter : ⦃ d : is-discrete A ⦄ {z : A} {p : A → Bool} {s : LFSet A}
            → z ∈ₛ? filterₛ p s ＝ p z and (z ∈ₛ? s)
 ∈ₛ?-filter {z} {p} {s} =
-  so→true! $
-  subst So (biimplies-equals (z ∈ₛ? filterₛ p s) (p z and (z ∈ₛ? s))) $
-  and-so-≃ {x = (z ∈ₛ? filterₛ p s) implies p z and (z ∈ₛ? s)} ⁻¹ $
-    true→so! ⦃ reflects-implies ⦄
-             (λ zf → let (pz , zm) = filter-∈ₛ (so→true! zf) in
-                     and-so-≃ ⁻¹ $ pz , true→so! zm)
-  , true→so! ⦃ reflects-implies ⦄
-             (λ pz → let pzzm = and-so-≃ $ pz in
-                     true→so! (∈-filterₛ (pzzm .fst) (so→true! (pzzm .snd))))
+  so-injₑ $ prop-extₑ!
+    (λ zf → let (pz , zm) = filter-∈ₛ (so→true! zf) in
+            and-so-≃ ⁻¹ $ pz , true→so! zm)
+    (λ pz → let pzzm = and-so-≃ $ pz in
+            true→so! (∈-filterₛ (pzzm .fst) (so→true! (pzzm .snd))))
 
 ∈ₛ-∷= : ⦃ d : is-discrete A ⦄
       → {z : A} {s : LFSet A}

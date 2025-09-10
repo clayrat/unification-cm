@@ -938,14 +938,19 @@ opaque
 
 opaque
   unfolding _∩∷_
-  size-∩∷ : ⦃ d : is-discrete A ⦄ → {xs ys : LFSet A}
-          → sizeₛ (xs ∩∷ ys) ≤ sizeₛ xs
-  size-∩∷ = filter-size≤
+  size-∩∷-≤ : ⦃ d : is-discrete A ⦄ → {xs ys : LFSet A}
+            → sizeₛ (xs ∩∷ ys) ≤ sizeₛ xs
+  size-∩∷-≤ = filter-size≤
 
-  size-∩∷-⊆ : ⦃ d : is-discrete A ⦄ → {xs ys : LFSet A}
+  size-∩∷→⊆ : ⦃ d : is-discrete A ⦄ → {xs ys : LFSet A}
              → sizeₛ (xs ∩∷ ys) ＝ sizeₛ xs
              → xs ⊆ ys
-  size-∩∷-⊆ e = so→true! ∘ all←filter-size= e
+  size-∩∷→⊆ e = so→true! ∘ all←filter-size= e
+
+  size-∩∷←⊆ : ⦃ d : is-discrete A ⦄ → {xs ys : LFSet A}
+             → xs ⊆ ys
+             → sizeₛ (xs ∩∷ ys) ＝ sizeₛ xs
+  size-∩∷←⊆ s = all→filter-size= (true→so! ∘ s)
 
   size-∪∷-∩∷ : ⦃ d : is-discrete A ⦄ → {xs ys : LFSet A}
             → sizeₛ (xs ∪∷ ys) + sizeₛ (xs ∩∷ ys) ＝ sizeₛ xs + sizeₛ ys
@@ -1001,12 +1006,19 @@ opaque
            ∙ size-[]) ⁻¹)
     ∙ size-∪∷-∩∷
 
-  size-minus-∩∷ : ⦃ d : is-discrete A ⦄ → {xs ys : LFSet A}
-                → sizeₛ (minus xs ys) + sizeₛ (xs ∩∷ ys) ＝ sizeₛ xs
-  size-minus-∩∷ {xs} {ys} =
-      +-comm (sizeₛ (minus xs ys)) _
-    ∙ size-∪∷-∥ₛ ∩∷-minus-∥ₛ ⁻¹
-    ∙ ap sizeₛ (∩∷-minus-compl {ys = ys})
+size-minus-∩∷ : ⦃ d : is-discrete A ⦄ → {xs ys : LFSet A}
+              → sizeₛ (minus xs ys) + sizeₛ (xs ∩∷ ys) ＝ sizeₛ xs
+size-minus-∩∷ {xs} {ys} =
+    +-comm (sizeₛ (minus xs ys)) _
+  ∙ size-∪∷-∥ₛ ∩∷-minus-∥ₛ ⁻¹
+  ∙ ap sizeₛ (∩∷-minus-compl {ys = ys})
+
+size-minus-⊆ : ⦃ d : is-discrete A ⦄ → {xs ys : LFSet A}
+             → ys ⊆ xs → sizeₛ (minus xs ys) + sizeₛ ys ＝ sizeₛ xs
+size-minus-⊆ {xs} {ys} s =
+    ap (sizeₛ (minus xs ys) +_)
+       (size-∩∷←⊆ s ⁻¹ ∙ ap sizeₛ ∩∷-comm)
+  ∙ size-minus-∩∷ {ys = ys}
 
 size-≥-⊆ : ⦃ d : is-discrete A ⦄ → {xs ys : LFSet A}
           → xs ⊆ ys → sizeₛ xs ＝ sizeₛ ys → ys ⊆ xs

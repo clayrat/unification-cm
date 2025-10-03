@@ -222,6 +222,11 @@ unconsₛ {z} {x} {xs} {B} bp f g z∈∷ =
     ∉ₛ-∷ {xs = xs} (nin ∘ hereₛ) ihx , ihy
   go .truncʳ zs = hlevel!
 
+-- TODO move to Notation.Membership?
+=→⊆ : {xs ys : LFSet A}
+    → xs ＝ ys → xs ⊆ ys
+=→⊆ e {x} = subst (x ∈_) e
+
 ⊆-∷ : {z : A} {xs ys : LFSet A}
      → xs ⊆ ys → (z ∷ xs) ⊆ (z ∷ ys)
 ⊆-∷ {z} {ys} sub {x} x∈ =

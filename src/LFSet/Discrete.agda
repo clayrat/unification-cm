@@ -380,8 +380,36 @@ opaque
 
 opaque
   unfolding mapₛ
+  rem-map-⊆ : ⦃ dA : is-discrete A ⦄ ⦃ dB : is-discrete B ⦄ {f : A → B} {z : A} {s : LFSet A}
+            → rem (f z) (mapₛ f s) ⊆ mapₛ f (rem z s)
+  rem-map-⊆ {f} {z} {s} = elim-prop go s
+    where
+    go : Elim-prop λ q → rem (f z) (mapₛ f q) ⊆ mapₛ f (rem z q)
+    go .[]ʳ {x = q} q∈ =
+      false! ⦃ Refl-x∉ₛ[] ⦄
+             (subst (q ∈_) rem-[] q∈)
+    go .∷ʳ x {xs} ih {x = w} w∈ =
+      subst (w ∈_) (ap (mapₛ f) rem-∷ ⁻¹) $
+      Dec.elim
+        {C = λ q → w ∈ (if f z =? f x then rem (f z) (mapₛ f xs)
+                                      else f x ∷ rem (f z) (mapₛ f xs))
+                 → w ∈ mapₛ f (if ⌊ q ⌋ then rem z xs else x ∷ rem z xs)}
+        (λ z=x →
+             ih ∘ subst (w ∈ₛ_)
+                        (if-true (true→so! (ap f z=x))))
+        (λ z≠x →
+             Dec.elim
+                {C = λ q → w ∈ₛ (if ⌊ q ⌋ then rem (f z) (mapₛ f xs)
+                                          else f x ∷ rem (f z) (mapₛ f xs))
+                         → w ∈ₛ f x ∷ mapₛ f (rem z xs)}
+                (λ fz=fx → thereₛ ∘ ih)
+                (λ fz≠fx → ⊆-∷ ih)
+                (f z ≟ f x))
+        (z ≟ x)
+        (subst (w ∈_) rem-∷ w∈)
+    go .truncʳ = hlevel!
 
-  -- TODO ⊆ ?
+  -- TODO flip
   map-rem-inj : ⦃ dA : is-discrete A ⦄ ⦃ dB : is-discrete B ⦄ {f : A → B} {z : A} {s : LFSet A}
               → Injective f
               → mapₛ f (rem z s) ＝ rem (f z) (mapₛ f s)
@@ -936,11 +964,11 @@ opaque
     go .truncʳ = hlevel!
 
   all→filter-size= : ⦃ d : is-discrete A ⦄ {p : A → Bool} {s : LFSet A}
-                   → (∀ {x : A} → x ∈ s → ⌞ p x ⌟)
+                   → ({x : A} → x ∈ s → ⌞ p x ⌟)
                    → sizeₛ (filterₛ p s) ＝ sizeₛ s
   all→filter-size= {A} {p} {s} = elim-prop go s
     where
-    go : Elim-prop λ q → (∀ {x : A} → x ∈ q → ⌞ p x ⌟) → sizeₛ (filterₛ p q) ＝ sizeₛ q
+    go : Elim-prop λ q → ({x : A} → x ∈ q → ⌞ p x ⌟) → sizeₛ (filterₛ p q) ＝ sizeₛ q
     go .[]ʳ _ = refl
     go .∷ʳ x {xs} ih a =
       subst (λ q → sizeₛ (if q then x ∷ filterₛ p xs else filterₛ p xs) ＝ sizeₛ (x ∷ xs))
@@ -951,7 +979,19 @@ opaque
 
 opaque
   unfolding mapₛ
-  -- TODO ≤ ?
+  size-map≤ : ⦃ dA : is-discrete A ⦄ ⦃ dB : is-discrete B ⦄ {s : LFSet A}
+            → {f : A → B}
+            → sizeₛ (mapₛ f s) ≤ sizeₛ s
+  size-map≤ {s} {f} = elim-rem-prop go s
+    where
+    go : Elim-rem-prop λ q → sizeₛ (mapₛ f q) ≤ sizeₛ q
+    go .[]rʳ = =→≤ size-[] ∙ z≤
+    go .∷rʳ x {xs} x∈ ih =
+        =→≤ (ap (sizeₛ ∘ mapₛ f) (rem-∈-eq x∈ ⁻¹) ∙ size-∷)
+      ∙ s≤s (size-⊆ (=→⊆ (ap (mapₛ f) rem-idem) ∘ rem-map-⊆) ∙ ih)
+      ∙ =→≤ (size-∈ x∈ ⁻¹)
+    go .truncrʳ = hlevel!
+
   size-map-inj : ⦃ dA : is-discrete A ⦄ ⦃ dB : is-discrete B ⦄ {s : LFSet A}
                → {f : A → B} → Injective f
                → sizeₛ (mapₛ f s) ＝ sizeₛ s

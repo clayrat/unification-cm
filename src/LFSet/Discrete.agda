@@ -378,6 +378,32 @@ opaque
             → rem x (rem x s) ＝ rem x s
   rem-idem {s} = filter-idem {s = s}
 
+opaque
+  unfolding mapₛ
+
+  -- TODO ⊆ ?
+  map-rem-inj : ⦃ dA : is-discrete A ⦄ ⦃ dB : is-discrete B ⦄ {f : A → B} {z : A} {s : LFSet A}
+              → Injective f
+              → mapₛ f (rem z s) ＝ rem (f z) (mapₛ f s)
+  map-rem-inj {f} {z} {s} fi = elim-prop go s
+    where
+    go : Elim-prop λ q → mapₛ f (rem z q) ＝ rem (f z) (mapₛ f q)
+    go .[]ʳ = ap (mapₛ f) rem-[] ∙ rem-[] ⁻¹
+    go .∷ʳ x {xs} ih =
+        ap (mapₛ f) rem-∷
+      ∙ Dec.elim
+          {C = λ q → mapₛ f (if ⌊ q ⌋ then rem z xs else x ∷ rem z xs)
+                  ＝ (if f z =? f x then rem (f z) (mapₛ f xs) else f x ∷ rem (f z) (mapₛ f xs))}
+          (λ z=x →
+               ih
+             ∙ if-true (true→so! (ap f z=x)) ⁻¹)
+          (λ z≠x →
+               ap (f x ∷_) ih
+             ∙ if-false (false→so! (contra fi z≠x)) ⁻¹ )
+          (z ≟ x)
+      ∙ rem-∷ ⁻¹
+    go .truncʳ = hlevel!
+
 record Elim-rem-prop {A : 𝒰 ℓ} ⦃ d : is-discrete A ⦄ (P : LFSet A → 𝒰 ℓ′) : 𝒰 (ℓ ⊔ ℓ′) where
   no-eta-equality
   field
@@ -799,6 +825,9 @@ opaque
     ∙ ap (λ q → bit (not q) + sizeₛ (rem x s))
          (¬so≃is-false $ so-not (false→so! (∉-rem (inl refl))))
 
+  size-∈ : ⦃ d : is-discrete A ⦄ → {x : A} {s : LFSet A} → x ∈ s → sizeₛ s ＝ suc (sizeₛ (rem x s))
+  size-∈ x∈ = ap sizeₛ (∈ₛ-∷= x∈ ⁻¹) ∙ size-∷
+
   size-sng : ⦃ d : is-discrete A ⦄ → {x : A} → sizeₛ (sng x) ＝ 1
   size-sng {x} = size-∷ {x = x} {s = []} ∙ ap (suc ∘ sizeₛ) rem-[]
 
@@ -920,6 +949,27 @@ opaque
              ∙ ap (calc x xs +_) (ih (a ∘ thereₛ)))
     go .truncʳ = hlevel!
 
+opaque
+  unfolding mapₛ
+  -- TODO ≤ ?
+  size-map-inj : ⦃ dA : is-discrete A ⦄ ⦃ dB : is-discrete B ⦄ {s : LFSet A}
+               → {f : A → B} → Injective f
+               → sizeₛ (mapₛ f s) ＝ sizeₛ s
+  size-map-inj {s} {f} fi = elim-rem-prop go s
+    where
+    go : Elim-rem-prop λ q → sizeₛ (mapₛ f q) ＝ sizeₛ q
+    go .[]rʳ = size-[] ∙ size-[] ⁻¹
+    go .∷rʳ x {xs} x∈ ih =
+        ap (sizeₛ ∘ mapₛ f) (rem-∈-eq x∈ ⁻¹)
+      ∙ size-∷
+      ∙ ap suc (  ap sizeₛ
+                     (rem-∉-eq (subst (f x ∉_)
+                                      (map-rem-inj fi ⁻¹)
+                                      (∉-rem (inl refl))))
+                ∙ ih)
+      ∙ size-∈ x∈ ⁻¹
+    go .truncrʳ = hlevel!
+
 filter-size-neg : ⦃ d : is-discrete A ⦄ {p : A → Bool} {s : LFSet A} {z : A}
                 → ⌞ not (p z) ⌟ → z ∈ s → sizeₛ (filterₛ p s) < sizeₛ s
 filter-size-neg {p} {s} {z} npz z∈ =
@@ -1014,11 +1064,11 @@ size-minus-∩∷ {xs} {ys} =
   ∙ ap sizeₛ (∩∷-minus-compl {ys = ys})
 
 size-minus-⊆ : ⦃ d : is-discrete A ⦄ → {xs ys : LFSet A}
-             → ys ⊆ xs → sizeₛ (minus xs ys) + sizeₛ ys ＝ sizeₛ xs
+             → ys ⊆ xs → sizeₛ (minus xs ys) ＝ sizeₛ xs ∸ sizeₛ ys
 size-minus-⊆ {xs} {ys} s =
-    ap (sizeₛ (minus xs ys) +_)
-       (size-∩∷←⊆ s ⁻¹ ∙ ap sizeₛ ∩∷-comm)
-  ∙ size-minus-∩∷ {ys = ys}
+    +-cancel-∸-r (sizeₛ (minus xs ys)) (sizeₛ (xs ∩∷ ys)) ⁻¹
+  ∙ ap (_∸ sizeₛ (xs ∩∷ ys)) size-minus-∩∷
+  ∙ ap (sizeₛ xs ∸_) (ap sizeₛ ∩∷-comm ∙ size-∩∷←⊆ s)
 
 size-≥-⊆ : ⦃ d : is-discrete A ⦄ → {xs ys : LFSet A}
           → xs ⊆ ys → sizeₛ xs ＝ sizeₛ ys → ys ⊆ xs

@@ -609,6 +609,13 @@ from-maybe = Maybe.rec [] sng
 from-list : List A → LFSet A
 from-list = List.rec [] _∷_
 
+opaque
+  unfolding mapₛ
+  from-list-map : {A : 𝒰 ℓ} {B : 𝒰 ℓ′} {f : A → B} {xs : List A}
+                → mapₛ f (from-list xs) ＝ from-list (map f xs)
+  from-list-map     {xs = []} = refl
+  from-list-map {f} {xs = x ∷ xs} = ap (f x ∷_) (from-list-map {xs = xs})
+
 ∷-from-list-replicate : ∀ {n} {x : A}
                       → x ∷ from-list (replicate n x) ＝ sng x
 ∷-from-list-replicate {n = zero}  = refl
@@ -635,3 +642,4 @@ from-vec-replicate-0< : ∀ {n} {x : A}
                   → from-vec (Vec.replicate n x) ＝ sng x
 from-vec-replicate-0< {n = zero}  zl = false! zl
 from-vec-replicate-0< {n = suc n} _  = ∷-from-vec-replicate {n = n}
+
